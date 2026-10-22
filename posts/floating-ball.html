@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写一个会跟着鼠标放大的悬浮球 — xiray</title>
+<meta name="description" content="拖动、惯性、鼠标靠近时变大：手感全藏在几个数字里。">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>写一个会跟着鼠标放大的悬浮球</h1>
+      <p class="article-meta">2026 · 09 · 20 <span class="dot">·</span> 前端 <span class="dot">·</span> 约 5 分钟</p>
+    </header>
+
+    <div class="prose">
+
+      <p>Chrome 扩展里塞一个悬浮球，点一下弹出对话面板。功能半小时就写完了，手感调了一晚上。</p>
+
+      <p>这篇记一下最后定下来的几个数，以及为什么是这几个数。</p>
+
+      <h2>骨架：一个绝对定位的 div</h2>
+
+      <p>不要用 <code>position: fixed</code> 加 <code>left/top</code> 去改位置——每帧改 layout 属性会触发重排，球一多就掉帧。用 <code>transform</code>：</p>
+
+      <pre><code>.ball {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  will-change: transform;
+}</code></pre>
+
+      <p>然后所有位移和缩放都写进一个 <code>transform</code> 里，浏览器会把它丢给合成层，不碰布局。</p>
+
+      <pre><code>ball.style.transform =
+  `translate3d(${x}px, ${y}px, 0) scale(${scale})`;</code></pre>
+
+      <p>注意 <code>translate</code> 在前、<code>scale</code> 在后。反过来球的位置会被缩放一起放大，鼠标一靠近它就"飞"走了。</p>
+
+      <h2>拖动：别用 mousemove 算差值</h2>
+
+      <p>新手常见写法是每次 <code>mousemove</code> 时把 <code>clientX</code> 直接赋给球的坐标。问题是一按下去球就"跳"到鼠标中心，因为没算住按下时的偏移量。</p>
+
+      <p>正确做法是记录按下瞬间鼠标与球心的差值：</p>
+
+      <pre><code>ball.addEventListener('pointerdown', (e) =&gt; {
+  offsetX = e.clientX - x;
+  offsetY = e.clientY - y;
+  ball.setPointerCapture(e.pointerId);
+});</code></pre>
+
+      <p>之后每次移动都用这个 <code>offset</code> 去减，球就会像被手指按住一样跟过来。</p>
+
+      <p>用 <code>pointerdown</code> 而不是 <code>mousedown</code>，是因为它同时覆盖鼠标、触摸和触控笔，而且 <code>setPointerCapture</code> 能保证鼠标甩出球外面甚至甩出窗口时，事件还继续发给球。不加这个，快速拖动一定会"掉手"。</p>
+
+      <h2>惯性：只留一个速度向量</h2>
+
+      <p>松手时球要顺势滑一段再停。最简单可靠的实现是维护速度，每帧衰减：</p>
+
+      <pre><code>function tick() {
+  if (!dragging) {
+    x += vx;
+    y += vy;
+    vx *= 0.92;
+    vy *= 0.92;
+    if (Math.abs(vx) &lt; 0.05) vx = 0;
+    if (Math.abs(vy) &lt; 0.05) vy = 0;
+  }
+  render();
+  requestAnimationFrame(tick);
+}</code></pre>
+
+      <p><code>0.92</code> 这个数决定"滑多远"。试过 <code>0.98</code>，球能滑半屏，像在冰面上；试过 <code>0.8</code>，几乎感觉不到惯性。0.9 到 0.93 之间比较像有摩擦的桌面。</p>
+
+      <p>速度本身在移动时用位移差累加，松手那一刻取最近几帧的平均值，不要用最后一帧的瞬时值——经常会拿到 0，球就原地不动了。</p>
+
+      <h2>鼠标靠近放大：这点最容易被做坏</h2>
+
+      <p>原本想要的效果是"鼠标快碰到球时球变大一点，像在邀请你点它"。第一版用 <code>:hover</code> 加 <code>transform: scale(1.15)</code>，结果很难受：鼠标一进边界就瞬间弹大，一出去又瞬间弹回，视觉上像抽搐。</p>
+
+      <p>而且 <code>:hover</code> 和拖动用的 <code>transform</code> 会打架——JS 每帧覆盖 <code>transform</code>，CSS 的 hover 缩放直接被冲掉。</p>
+
+      <p>最后改成：在 <code>requestAnimationFrame</code> 循环里自己算距离，把缩放当作一个可以插值的连续量。</p>
+
+      <pre><code>const d = Math.hypot(mouseX - (x + r), mouseY - (y + r));
+const target = d &lt; 90 ? 1.18 : 1;
+scale += (target - scale) * 0.18;</code></pre>
+
+      <p>关键在于 <code>scale</code> 不直接等于目标值，而是每帧往目标靠近 18%。这样它有"追赶"的过程，进去有 100 毫秒左右的缓慢放大，出来也是慢慢缩回。手感就是从这里来的。</p>
+
+      <p>阈值 <code>90px</code> 是从球心算的，球半径 28，也就是鼠标进入球外 62px 的范围开始变大。这个距离刚好是"你还没意识到要碰它，它先动了"。</p>
+
+      <p>另外一条：<strong>拖动的时候不要放大</strong>。按住球时它在手里，再放大就很怪。所以 <code>dragging</code> 时把 target 强制设回 1。</p>
+
+      <h2>几个容易忽略的细节</h2>
+
+      <ul>
+        <li>拖动时要临时关掉 <code>transition</code>，否则位置会带动画，跟手变慢，像拖着一块橡皮。</li>
+        <li>阴影比边框更能表现"浮起来"。用两层阴影，一层近的实一点，一层远的淡一点。</li>
+        <li>球要能被拖到边缘之外一点点，但松手后自动弹回可视区，否则会被拖到屏幕外面再也找不回来。</li>
+        <li>窗口尺寸变化时重新夹一下边界，不然拖到副屏再拔掉显示器，球就没了。</li>
+      </ul>
+
+      <blockquote>
+        <p>功能是一小时的事，手感是一个晚上的事。而这个东西好不好用，九成取决于那个晚上。</p>
+      </blockquote>
+
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

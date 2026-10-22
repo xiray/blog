@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>把博客搬上 GitHub Pages，顺便记一下踩的坑 — xiray</title>
+<meta name="description" content="一个不需要服务器、不需要构建、不花钱的静态站点方案。">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>把博客搬上 GitHub Pages，顺便记一下踩的坑</h1>
+      <p class="article-meta">2026 · 10 · 22 <span class="dot">·</span> 部署 <span class="dot">·</span> 约 4 分钟</p>
+    </header>
+
+    <div class="prose">
+
+      <p>想有个写东西的地方，要求很低：不用买服务器，不用配数据库，打开就能看，改完推上去就生效。GitHub Pages 正好是干这个的。</p>
+
+      <h2>它到底是什么</h2>
+
+      <p>简单说：你在仓库里放一堆静态文件（HTML / CSS / JS / 图片），GitHub 拿一台机器帮你挂出去，给你一个域名。没有任何后端，没有 PHP，没有 Node 进程在跑。</p>
+
+      <p>这对博客来说完全够了。博客的绝大部分内容，本来就是"编译完就不变"的东西。</p>
+
+      <p>项目页的地址长这样：</p>
+
+      <pre><code>https://&lt;用户名&gt;.github.io/&lt;仓库名&gt;/</code></pre>
+
+      <p>如果你把仓库直接命名为 <code>&lt;用户名&gt;.github.io</code>，地址就会变成 <code>https://&lt;用户名&gt;.github.io/</code>，不带子路径。</p>
+
+      <h2>坑一：绝对路径会全挂</h2>
+
+      <p>这是最容易踩的一个。项目页部署在 <code>/blog/</code> 这样的子路径下，所以你在本地写 <code>&lt;link href="/assets/style.css"&gt;</code>，本地双击打开时是好的（因为根目录就是文件所在盘），推上去就变成了 <code>https://&lt;用户名&gt;.github.io/assets/style.css</code>——那个文件根本不存在。</p>
+
+      <p>解决办法很土但很有效：<strong>全部用相对路径</strong>。</p>
+
+      <pre><code>&lt;!-- 首页 --&gt;
+&lt;link rel="stylesheet" href="assets/style.css"&gt;
+
+&lt;!-- 子目录里的页面 --&gt;
+&lt;link rel="stylesheet" href="../assets/style.css"&gt;</code></pre>
+
+      <p>代价是你不能把页面挪来挪去而不改路径，但换来的是它在任何子目录下都能跑，连本地直接双击也能正常显示。对一个小站来说，这笔买卖划算。</p>
+
+      <h2>坑二：下划线开头的文件会被吃掉</h2>
+
+      <p>GitHub Pages 默认跑 Jekyll。Jekyll 会把以 <code>_</code> 开头的目录（比如 <code>_sass</code>、<code>_layouts</code>）当成自己的东西处理，不当作静态文件发布。</p>
+
+      <p>如果你完全不用 Jekyll，就在仓库根目录放一个空的 <code>.nojekyll</code> 文件。这样 GitHub 会原样发布所有文件，也省掉一次构建，推送后生效更快。</p>
+
+      <pre><code>touch .nojekyll</code></pre>
+
+      <h2>坑三：认证，不是写好文件就能推</h2>
+
+      <p>2021 年之后 GitHub 不再接受账号密码推送，只能用 Personal Access Token 或者 SSH key。第一次 <code>git push</code> 会卡在那里要密码，输账号密码是没用的。</p>
+
+      <p>我目前的办法是生成一个 classic token（勾 <code>repo</code> 权限），在本机配置好凭据存储，之后就不用再管了：</p>
+
+      <pre><code>git config --global credential.helper manager
+git remote set-url origin https://github.com/xiray/blog.git
+# 第一次 push 时用 token 当作密码</code></pre>
+
+      <p>顺便说一句，如果你的机器走代理，git 默认不会用系统的代理变量，得单独告诉它：</p>
+
+      <pre><code>git config --global http.proxy http://127.0.0.1:端口</code></pre>
+
+      <p>不然就是一直卡住，没有报错，没有提示，什么都不发生——比报错还难受。</p>
+
+      <h2>坑四：别指望它快</h2>
+
+      <p>GitHub Pages 的服务器在国外，国内访问速度看运气。静态资源还好，几 KB 的 HTML 加载不慢，但第一次解析域名可能要一两秒。真要快，得上 CDN 或者换托管，但那就不是"不花钱不折腾"了。</p>
+
+      <p>所以这个站做得很轻：没有框架，没有 CDN，没有字体文件，没有一个外部请求。整站加起来不到 100 KB，图片一个都没有。</p>
+
+      <h2>值不值得</h2>
+
+      <p>值得。写一篇文章的成本就是新建一个 HTML 文件，Ctrl+C、Ctrl+V 改一改，加一条列表，<code>git push</code>。没有构建步骤意味着没有构建失败，三年后回来它还在。</p>
+
+      <blockquote>
+        <p>工具应该比它服务的东西活得更久。静态文件大概是目前最接近这个目标的东西。</p>
+      </blockquote>
+
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

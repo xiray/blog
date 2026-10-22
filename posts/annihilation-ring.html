@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一个游戏，两个版本：单机与局域网联机 — xiray</title>
+<meta name="description" content="同一个游戏逻辑，一份跑在浏览器单文件里，一份跑在 Node 服务端。">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>一个游戏，两个版本：单机与局域网联机</h1>
+      <p class="article-meta">2026 · 08 · 15 <span class="dot">·</span> 游戏 <span class="dot">·</span> 约 6 分钟</p>
+    </header>
+
+    <div class="prose">
+
+      <p>《湮灭环界》一开始只是个单文件 HTML：双击就能玩，发给人也只要发一个文件。后来说想两个人一起玩，就有了服务端版本。于是同一个游戏有了两副身体。</p>
+
+      <h2>两种形态</h2>
+
+      <div class="info-row" style="grid-template-columns: 7rem 1fr;">
+        <dt>单机版</dt>
+        <dd>一个 <code>.html</code> 文件，逻辑和渲染全部内联。零依赖，双击即玩。</dd>
+      </div>
+      <div class="info-row" style="grid-template-columns: 7rem 1fr; border-bottom: none;">
+        <dt>联机版</dt>
+        <dd><code>sim.js</code> 共享核心 + <code>public/client.js</code> 渲染 + <code>server.js</code>，跑在同一局域网的机器上。</dd>
+      </div>
+
+      <p>好处很明显：单机版随时能给任何人看，不用装任何东西。坏处也很明显——<strong>同一套规则写了两遍</strong>。</p>
+
+      <h2>最大的敌人是数值漂移</h2>
+
+      <p>两边都在改的时候，最先出问题的不是代码，是数字。</p>
+
+      <p>单机版里某张技能卡冷却 8 秒，联机版里写的是 7.5 秒；单机版暴击倍率 1.8，联机版是 2.0。没有人报错，游戏也都跑得起来，只是两边的手感悄悄不一样了。等你发现的时候，已经不知道该以哪边为准。</p>
+
+      <p>后来定了一条规矩：<strong>联机版的 <code>sim.js</code> 是唯一真源</strong>。单机版里那些数字不算"另一套设定"，只是同一套数值的不同写法。移植的时候只做写法适配（单机版没有 <code>ownerId</code>，没有对抗模式，震动效果用本地变量实现），不重新调数值。</p>
+
+      <h2>共享核心该抽到多细</h2>
+
+      <p>第一版抽得太细，把渲染层的插值也塞进去了，结果单机版带了一堆用不上的代码，联机版又被 DOM 依赖绑住。第二版重做，只留纯粹的规则：</p>
+
+      <pre><code>// sim.js —— 只做这些事
+step(state, inputs, dt)   // 推进一帧
+applySkill(state, owner, cardId)
+checkCollisions(state)
+
+// 完全不碰：DOM、canvas、音频、网络</code></pre>
+
+      <p>渲染层从 <code>state</code> 读数据，怎么画是它自己的事。这样单机版和联机版可以各画各的，规则永远一致。</p>
+
+      <p>副作用是 <code>state</code> 变成了一个很大的对象。一开始试过每帧深拷贝，帧率直接掉一半。后来改成只在关键节点做快照（回合开始、技能结算），其他时候原地改动加版本号。</p>
+
+      <h2>同步：局域网就别搞花活</h2>
+
+      <p>因为是局域网，延迟基本在个位数毫秒，所以没有做预测、没有做回滚，就是最简单的<strong>服务端权威 + 客户端输入上行</strong>：</p>
+
+      <ul>
+        <li>客户端只上报输入（方向、技能 ID），不自己算结果</li>
+        <li>服务端跑 <code>sim.step()</code>，把状态广播给所有人</li>
+        <li>客户端收到状态后直接渲染，本地做一点插值让画面不抖</li>
+      </ul>
+
+      <p>牺牲了极端网络下的手感，换来了一个三百行就能看懂的网络层。局域网场景下这个取舍几乎无痛。</p>
+
+      <p>唯一做的手脚是<strong>输入缓冲</strong>：客户端把输入打上序号发出去，服务端按序号顺序消费，避免两个包乱序到达导致角色往回闪一下。</p>
+
+      <h2>测试是唯一能让两边不跑偏的办法</h2>
+
+      <p>改完一边必须回头把另一边对齐，这种事靠记忆一定会漏。所以联机版有 <code>npm test</code>，单机版则是抽 <code>&lt;script&gt;</code> 出来配一个假 DOM 跑断言。</p>
+
+      <p>断言写得很笨，就是"给这套输入，跑 60 帧，血量应该是这个数"：</p>
+
+      <pre><code>step(state, inputs, 1/60)
+assert.equal(state.units[0].hp, 720)</code></pre>
+
+      <p>笨，但有用。它拦下来的都是那种"看着没问题、玩十分钟才觉得不对"的错误。</p>
+
+      <h2>如果再选一次</h2>
+
+      <p>如果一开始就知道会有联机版，我大概会从第一天就把逻辑拆成共享模块，单机版用一个小打包脚本内联成单文件。省掉后面所有的对齐工作。</p>
+
+      <p>但反过来说，正是因为先有了那个"双击就能玩"的单文件，这个游戏才有机会被人打开。先能跑，再谈结构——这条顺序我到现在也认。</p>
+
+      <blockquote>
+        <p>两副身体，一颗心脏。心脏只有一颗的时候，另一副身体才不会长歪。</p>
+      </blockquote>
+
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
