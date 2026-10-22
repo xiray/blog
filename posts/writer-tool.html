@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>现在加文章，只需要点一下 — xiray</title>
+<meta name="description" content="给博客加了个本地写作台：网页里写完点发布，自动生成文章、更新首页、提交推送，代理也不用再管。">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>现在加文章，只需要点一下</h1>
+      <p class="article-meta">2026 · 10 · 22 <span class="dot">·</span> 约 3 分钟</p>
+    </header>
+
+    <div class="prose">
+      <p>每次加文章都要复制一个 HTML 文件、改标题，再手动往首页列表里插一条。做两次就烦了。</p>
+
+      <p>所以给博客配了个本地写作台：<code>tools/写作台.bat</code>，双击就能用。</p>
+
+      <h2>怎么用</h2>
+
+      <p>双击 <code>写作台.bat</code>，浏览器会弹出写作页面。左边写 Markdown，右边实时预览，看到的就是最终效果。</p>
+
+      <p>填好标题、日期、短名（网址里那串英文），点「发布」。剩下的自动完成：</p>
+
+      <ul>
+        <li>生成 <code>posts/短名.html</code></li>
+        <li>在首页文章列表最上面插一条</li>
+        <li>提交并推送到 GitHub</li>
+        <li>半分钟左右线上就能打开</li>
+      </ul>
+
+      <h2>为什么非要一个本地服务</h2>
+
+      <p>GitHub Pages 是纯静态托管。浏览器里的页面没有权限往本机硬盘写文件，也没法执行 git 命令。所以「网页里点一下就直接上线」这件事，必须有本机的一个进程在旁边跑。</p>
+
+      <p>这个进程只监听 <code>127.0.0.1</code>，不开外网端口，不往外发任何数据，只做三件事：写文件、更新首页、提交推送。</p>
+
+      <h2>代理也一并不用管了</h2>
+
+      <p>之前 git 连 GitHub 得把代理端口写死在配置里，端口一换就静默卡住，连报错都没有，非常难受。</p>
+
+      <p>现在每次推送前自动探测：先读系统代理设置和环境变量，再试一批常见端口，然后真的去连一次 <code>github.com</code>，谁能通就用谁。一个都不通就直连。结果只作用于当次命令，不写进配置，所以换端口不用改任何东西。</p>
+
+      <blockquote>
+        <p>能少一次手动操作，就少一个以后会忘掉的地方。</p>
+      </blockquote>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
