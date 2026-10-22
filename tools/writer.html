@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写作台 — xiray</title>
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  .bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 1.25rem;
+    height: 3.5rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg-soft);
+  }
+
+  .bar .brand {
+    font-family: var(--serif);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .bar .brand span {
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    margin-left: 0.5rem;
+    letter-spacing: 0.08em;
+  }
+
+  .bar .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .status {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    max-width: 30rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status.ok { color: #6ee7a8; }
+  .status.err { color: #ff8f8f; }
+
+  button {
+    font: inherit;
+    font-size: 0.875rem;
+    padding: 0.45rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.16s ease;
+    border: 1px solid transparent;
+  }
+
+  button.ghost {
+    background: transparent;
+    border-color: var(--line);
+    color: var(--text-dim);
+  }
+
+  button.ghost:hover {
+    border-color: var(--muted);
+    color: var(--text);
+  }
+
+  button.primary {
+    background: var(--accent);
+    color: #1a1206;
+    font-weight: 600;
+  }
+
+  button.primary:hover { filter: brightness(1.08); }
+
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+    filter: none;
+  }
+
+  /* ---------------- 分栏 ---------------- */
+  .layout {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .pane {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .pane.edit {
+    border-right: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .pane.preview { background: var(--bg); }
+
+  .pane-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .pane-head .count {
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+
+  /* ---------------- 编辑区 ---------------- */
+  .fields {
+    flex: 0 0 auto;
+    padding: 1rem 1.25rem 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  input[type="text"],
+  input[type="date"] {
+    font: inherit;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    padding: 0.4rem 0;
+    outline: none;
+    transition: border-color 0.16s ease;
+    width: 100%;
+  }
+
+  input[type="text"]:focus,
+  input[type="date"]:focus { border-bottom-color: var(--accent); }
+
+  input::placeholder { color: var(--muted); opacity: 0.7; }
+
+  #title {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    border-bottom: none;
+    padding: 0.25rem 0;
+  }
+
+  .meta-row {
+    display: grid;
+    grid-template-columns: 11rem minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .meta-row label {
+    display: block;
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.15rem;
+  }
+
+  input[type="date"] {
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    color-scheme: dark;
+  }
+
+  #body {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    resize: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 1rem;
+    line-height: 1.8;
+    padding: 0.75rem 1.25rem 2rem;
+    tab-size: 2;
+  }
+
+  #body::placeholder { color: var(--muted); opacity: 0.65; }
+
+  /* ---------------- 预览区 ---------------- */
+  .preview-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 2rem 2.5rem 4rem;
+  }
+
+  .preview-scroll .prose {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+
+  .preview-scroll h1.preview-title {
+    font-family: var(--serif);
+    font-size: clamp(1.875rem, 3vw, 2.375rem);
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.75rem;
+    font-weight: 600;
+    max-width: 42rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .preview-meta {
+    max-width: 42rem;
+    margin: 0 auto 2.5rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+
+  .empty-hint {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    text-align: center;
+    padding-top: 4rem;
+  }
+
+  /* ---------------- 滚动条 ---------------- */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 6px;
+    border: 2px solid var(--bg);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line-soft); }
+
+  /* ---------------- 窄屏 ---------------- */
+  @media (max-width: 60rem) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .pane.preview { display: none; }
+    .meta-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="bar">
+    <div class="brand">xiray<span>写作台</span></div>
+    <div class="actions">
+      <span class="status" id="status">就绪</span>
+      <button class="ghost" id="newBtn">新建</button>
+      <button class="primary" id="pubBtn">发布</button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <section class="pane edit">
+      <div class="pane-head">
+        <span>Markdown</span>
+        <span class="count" id="counter">0 字 · 约 1 分钟</span>
+      </div>
+
+      <div class="fields">
+        <input type="text" id="title" placeholder="标题" autocomplete="off">
+        <div class="meta-row">
+          <div>
+            <label for="date">日期</label>
+            <input type="date" id="date">
+          </div>
+          <div>
+            <label for="slug">短名（网址用）</label>
+            <input type="text" id="slug" placeholder="my-post-name" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <div>
+          <label for="excerpt" style="display:block;font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem;">摘要</label>
+          <input type="text" id="excerpt" placeholder="显示在首页列表里的一句话" autocomplete="off">
+        </div>
+      </div>
+
+      <textarea id="body" spellcheck="false" placeholder="在这里写正文。
+
+支持 Markdown：
+
+## 小标题
+**粗体**  *斜体*  `行内代码`
+
+- 列表项
+- 列表项
+
+> 引用
+
+```代码块```"></textarea>
+    </section>
+
+    <section class="pane preview">
+      <div class="pane-head">
+        <span>预览</span>
+        <span class="count" id="liveTag">实时</span>
+      </div>
+      <div class="preview-scroll" id="previewScroll">
+        <div id="emptyHint" class="empty-hint">左边写，这里实时看到效果</div>
+        <div id="previewWrap" style="display:none">
+          <h1 class="preview-title" id="pvTitle"></h1>
+          <p class="preview-meta" id="pvMeta"></p>
+          <article class="prose" id="pvBody"></article>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var el = {
+    title: $("title"), date: $("date"), slug: $("slug"),
+    excerpt: $("excerpt"), body: $("body"),
+    status: $("status"), counter: $("counter"),
+    pubBtn: $("pubBtn"), newBtn: $("newBtn"),
+    pvTitle: $("pvTitle"), pvMeta: $("pvMeta"), pvBody: $("pvBody"),
+    previewWrap: $("previewWrap"), emptyHint: $("emptyHint"),
+    previewScroll: $("previewScroll")
+  };
+
+  var STORE = "xiray-writer-draft";
+  var slugTouched = false;
+
+  /* ---------------- Markdown ---------------- */
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function inline(raw) {
+    var s = esc(raw);
+    var codes = [];
+    s = s.replace(/`([^`]+)`/g, function (m, c) {
+      codes.push(c);
+      return "\u0000" + (codes.length - 1) + "\u0000";
+    });
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1">');
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/\u0000(\d+)\u0000/g, function (m, i) {
+      return "<code>" + codes[Number(i)] + "</code>";
+    });
+    return s;
+  }
+
+  function mdToHtml(src) {
+    var lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    var out = [];
+    var para = [];
+    var i = 0;
+
+    function flush() {
+      if (para.length) {
+        out.push("<p>" + inline(para.join(" ")) + "</p>");
+        para = [];
+      }
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+
+      // 代码块
+      if (/^```/.test(line.trim())) {
+        flush();
+        var buf = [];
+        i++;
+        while (i < lines.length && !/^```/.test(lines[i].trim())) {
+          buf.push(lines[i]);
+          i++;
+        }
+        i++;
+        out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>");
+        continue;
+      }
+
+      // 空行
+      if (!line.trim()) { flush(); i++; continue; }
+
+      // 标题
+      var h = line.match(/^(#{1,4})\s+(.*)$/);
+      if (h) {
+        flush();
+        var lvl = Math.min(h[1].length + 1, 4);
+        out.push("<h" + lvl + ">" + inline(h[2]) + "</h" + lvl + ">");
+        i++;
+        continue;
+      }
+
+      // 分割线
+      if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
+        flush();
+        out.push("<hr>");
+        i++;
+        continue;
+      }
+
+      // 引用
+      if (/^>\s?/.test(line)) {
+        flush();
+        var q = [];
+        while (i < lines.length && /^>\s?/.test(lines[i])) {
+          q.push(lines[i].replace(/^>\s?/, ""));
+          i++;
+        }
+        out.push("<blockquote><p>" + inline(q.join(" ")) + "</p></blockquote>");
+        continue;
+      }
+
+      // 无序列表
+      if (/^\s*[-*+]\s+/.test(line)) {
+        flush();
+        var ul = [];
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+          ul.push(lines[i].replace(/^\s*[-*+]\s+/, ""));
+          i++;
+        }
+        out.push("<ul>" + ul.map(function (t) {
+          return "<li>" + inline(t) + "</li>";
+        }).join("") + "</ul>");
+        continue;
+      }
+
+      // 有序列表
+      if (/^\s*\d+\.\s+/.test(line)) {
+        flush();
+        var ol = [];
+        while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+          ol.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
+          i++;
+        }
+        out.push("<ol>" + ol.map(function (t) {
+          return "<li>" + inline(t) + "</li>";
+        }).join("") + "</ol>");
+        continue;
+      }
+
+      para.push(line.trim());
+      i++;
+    }
+    flush();
+    return out.join("\n");
+  }
+
+  /* ---------------- 工具 ---------------- */
+
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
+  function dots(dateStr) {
+    var p = String(dateStr || "").split("-");
+    if (p.length === 3) return p[0] + " · " + p[1] + " · " + p[2];
+    return dateStr || "";
+  }
+
+  function autoSlug(title) {
+    var ascii = String(title || "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    if (ascii.length >= 3) return ascii;
+    var d = new Date();
+    return "post-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+      "-" + pad(d.getHours()) + pad(d.getMinutes());
+  }
+
+  function plainLength(s) {
+    return String(s || "")
+      .replace(/```[\s\S]*?```/g, "")
+      .replace(/[#>*_`\-\[\]()!]/g, "")
+      .replace(/\s+/g, "").length;
+  }
+
+  function minutesOf(s) {
+    var n = plainLength(s);
+    return Math.max(1, Math.round(n / 400));
+  }
+
+  /* ---------------- 渲染 ---------------- */
+
+  function render() {
+    var text = el.body.value;
+    var html = mdToHtml(text);
+    var title = el.title.value.trim();
+
+    if (!text.trim() && !title) {
+      el.previewWrap.style.display = "none";
+      el.emptyHint.style.display = "block";
+    } else {
+      el.emptyHint.style.display = "none";
+      el.previewWrap.style.display = "block";
+      el.pvTitle.textContent = title || "（未填标题）";
+      el.pvMeta.textContent = dots(el.date.value) + "  ·  约 " + minutesOf(text) + " 分钟";
+      el.pvBody.innerHTML = html;
+    }
+
+    var n = plainLength(text);
+    el.counter.textContent = n + " 字 · 约 " + minutesOf(text) + " 分钟";
+  }
+
+  /* ---------------- 草稿 ---------------- */
+
+  function saveDraft() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        title: el.title.value,
+        date: el.date.value,
+        slug: el.slug.value,
+        excerpt: el.excerpt.value,
+        body: el.body.value,
+        slugTouched: slugTouched
+      }));
+    } catch (e) { /* 忽略存储失败 */ }
+  }
+
+  function loadDraft() {
+    var raw;
+    try { raw = localStorage.getItem(STORE); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var d = JSON.parse(raw);
+      el.title.value = d.title || "";
+      el.date.value = d.date || todayStr();
+      el.slug.value = d.slug || "";
+      el.excerpt.value = d.excerpt || "";
+      el.body.value = d.body || "";
+      slugTouched = !!d.slugTouched;
+    } catch (e) { /* 坏数据就当没有 */ }
+  }
+
+  /* ---------------- 状态 ---------------- */
+
+  function setStatus(msg, kind) {
+    el.status.textContent = msg;
+    el.status.className = "status" + (kind ? " " + kind : "");
+  }
+
+  /* ---------------- 发布 ---------------- */
+
+  function publish() {
+    var title = el.title.value.trim();
+    var slug = el.slug.value.trim();
+    var bodyText = el.body.value;
+
+    if (!title) { setStatus("标题还没填", "err"); el.title.focus(); return; }
+    if (!bodyText.trim()) { setStatus("正文是空的", "err"); el.body.focus(); return; }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+      setStatus("短名只能用小写字母、数字和短横线", "err"); el.slug.focus(); return;
+    }
+
+    var payload = {
+      title: title,
+      slug: slug,
+      date: el.date.value || todayStr(),
+      excerpt: el.excerpt.value.trim() || title,
+      body: mdToHtml(bodyText),
+      minutes: minutesOf(bodyText)
+    };
+
+    el.pubBtn.disabled = true;
+    setStatus("正在发布…", "");
+
+    fetch("/api/publish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        el.pubBtn.disabled = false;
+        if (res.ok) {
+          setStatus("已发布 · " + (res.via ? "经由 " + res.via : "直连") + " · 约 30 秒后生效", "ok");
+          el.status.title = res.url;
+          window.open(res.url, "_blank", "noopener");
+          slugTouched = false;
+        } else {
+          setStatus("失败（" + (res.stage || "?") + "）：" + (res.error || "未知错误"), "err");
+          console.error(res);
+        }
+      })
+      .catch(function (e) {
+        el.pubBtn.disabled = false;
+        setStatus("连不上本地服务，确认 写作台.bat 还在运行", "err");
+        console.error(e);
+      });
+  }
+
+  /* ---------------- 新建 ---------------- */
+
+  function newPost() {
+    if (el.body.value.trim() || el.title.value.trim()) {
+      if (!confirm("当前内容会被清空（草稿已自动保存过版本），继续？")) return;
+    }
+    el.title.value = "";
+    el.body.value = "";
+    el.excerpt.value = "";
+    el.date.value = todayStr();
+    el.slug.value = autoSlug("");
+    slugTouched = false;
+    setStatus("新文章", "");
+    saveDraft();
+    render();
+    el.title.focus();
+  }
+
+  /* ---------------- 事件 ---------------- */
+
+  var timer = null;
+  function scheduleRender() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () { render(); saveDraft(); }, 180);
+  }
+
+  el.title.addEventListener("input", function () {
+    if (!slugTouched) el.slug.value = autoSlug(el.title.value);
+    scheduleRender();
+  });
+
+  el.slug.addEventListener("input", function () {
+    slugTouched = true;
+    el.slug.value = el.slug.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    saveDraft();
+  });
+
+  [el.date, el.excerpt].forEach(function (n) {
+    n.addEventListener("input", scheduleRender);
+  });
+
+  el.body.addEventListener("input", scheduleRender);
+
+  el.pubBtn.addEventListener("click", publish);
+  el.newBtn.addEventListener("click", newPost);
+
+  document.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      publish();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      saveDraft();
+      setStatus("草稿已保存", "ok");
+    }
+  });
+
+  /* ---------------- 启动 ---------------- */
+
+  loadDraft();
+  if (!el.date.value) el.date.value = todayStr();
+  if (!el.slug.value) el.slug.value = autoSlug(el.title.value);
+  render();
+})();
+</script>
+
+</body>
+</html>
