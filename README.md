@@ -54,3 +54,10 @@ Source 选 `Deploy from a branch`，Branch 选 `main` / `root`，保存。
 
 - **所有链接都用相对路径。** 项目页部署在 `/blog/` 子路径下，以 `/` 开头的绝对路径会 404。
 - **不要删 `.nojekyll`。** 删了之后下划线开头的文件会被 Jekyll 吞掉。
+- **走代理的机器要单独给 git 配代理。** git 不读系统的 `http_proxy` 有时会直接卡住、不给任何报错：
+
+  ```bash
+  git config http.proxy http://127.0.0.1:端口
+  ```
+
+  这个配置已经写在 `.git/config` 里了，只对当前仓库生效，不污染全局。
