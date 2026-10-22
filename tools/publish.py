@@ -331,16 +331,22 @@ def update_index(title, slug, dd, excerpt):
 
     item = LIST_ITEM.format(
         slug=slug, date_dots=esc(dd), title=esc(title), excerpt=esc(excerpt)
-    )
-    marker = '<ul class="post-list">'
-    pos = html.find(marker)
-    if pos < 0:
+    ).rstrip("\n")
+
+    # 统一规范成「空行 + 4 空格缩进」再插入，避免多次发布后空白堆积
+    head_pat = re.compile(r'(<ul class="post-list">)\s*(?=<li>)')
+    empty_pat = re.compile(r'(<ul class="post-list">)\s*(</ul>)')
+
+    if head_pat.search(html):
+        html = head_pat.sub(
+            lambda m: m.group(1) + "\n\n" + item + "\n\n    ", html, count=1
+        )
+    elif empty_pat.search(html):
+        html = empty_pat.sub(
+            lambda m: m.group(1) + "\n\n" + item + "\n\n  " + m.group(2), html, count=1
+        )
+    else:
         raise RuntimeError("index.html 里找不到文章列表容器")
-    insert_at = pos + len(marker)
-    # 跳过紧跟的空白
-    while insert_at < len(html) and html[insert_at] in " \t\r\n":
-        insert_at += 1
-    html = html[:insert_at] + "\n" + item + html[insert_at:]
 
     with open(idx_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
