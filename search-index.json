@@ -2,14 +2,6 @@
   "updated": "2026-10-23 17:29",
   "items": [
     {
-      "slug": "feature-test",
-      "title": "功能测试文章（可删除）",
-      "date": "2026-10-23",
-      "category": "代码编写",
-      "excerpt": "临时测试富文本、表格、附件、类别。",
-      "text": "这是小标题 普通段落， 粗体 、 斜体 、 下划线 ， 红色文字 ， 高亮背景 。 这是一段引用。 列一 列二 值 A 值 B console.log(\"hello\") 📎 测试附件.txt 560 B"
-    },
-    {
       "slug": "hello-github-pages",
       "title": "把博客搬上 GitHub Pages，顺便记一下踩的坑",
       "date": "2026-10-22",
