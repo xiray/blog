@@ -216,8 +216,15 @@ def run_git(args, timeout=120):
         return 1, "", repr(e)
 
 
+# 提交时只跟踪这些路径。用 git add -A 会把工作区里任何临时文件一起提交，
+# 之前就发生过测试页被发布流程顺手带进仓库的情况。
+TRACK_PATHS = ["index.html", "about.html", "README.md", "categories.json",
+               "search-index.json", "assets", "posts", "files", "tools",
+               ".gitignore", ".nojekyll"]
+
+
 def git_commit(message):
-    run_git(["add", "-A"])
+    run_git(["add", "-A", "--"] + TRACK_PATHS)
     code, out, err = run_git(["commit", "-m", message])
     if code == 0:
         return True, "已提交"
