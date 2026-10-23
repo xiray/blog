@@ -562,7 +562,7 @@ class Handler(BaseHTTPRequestHandler):
         path, _, qs = self.path.partition("?")
         query = {k: v[0] for k, v in parse_qs(qs).items()}
 
-        if path in ("/", "/index.html", "/writer.html"):
+        if path in ("/", "/writer.html"):
             fp = os.path.join(TOOLS, "writer.html")
             if not os.path.exists(fp):
                 return self._send(500, "找不到 writer.html", "text/plain; charset=utf-8")
@@ -589,7 +589,8 @@ class Handler(BaseHTTPRequestHandler):
     def _serve_static(self, path):
         rel = path.lstrip("/")
         allowed_prefix = ("assets/", "posts/", "files/")
-        allowed_file = ("search-index.json", "categories.json")
+        allowed_file = ("search-index.json", "categories.json",
+                        "index.html", "about.html")
         if not (rel.startswith(allowed_prefix) or rel in allowed_file):
             return self._send(404, "not found", "text/plain; charset=utf-8")
         root_abs = os.path.normpath(ROOT)

@@ -117,8 +117,9 @@
   .toolbar .tb {
     min-width: 1.9rem; height: 1.9rem; padding: 0 .4rem; border-radius: 5px;
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: .8125rem; color: var(--text-dim); border: 1px solid transparent;
+    font-size: .875rem; color: var(--text-dim); border: 1px solid transparent;
   }
+  .toolbar .tb svg { display: block; }
   .toolbar .tb:hover { background: var(--bg-soft); color: var(--text); }
   .toolbar .tb.on { background: var(--bg-soft); color: var(--accent); border-color: var(--line); }
   .toolbar .sep { width: 1px; height: 1.25rem; background: var(--line); margin: 0 .35rem; }
@@ -263,10 +264,18 @@
 
         <span class="sep"></span>
 
-        <button class="tb" data-act="link" title="链接">🔗</button>
-        <button class="tb" data-act="table" title="插入表格">▦</button>
-        <button class="tb" data-act="attach" title="插入附件">📎</button>
-        <button class="tb" data-act="image" title="插入图片">🖼</button>
+        <button class="tb" data-act="link" title="链接">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10.5 13.5a4.5 4.5 0 0 0 6.4.4l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4l-1.5 1.5"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4-.4l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l1.5-1.5"/></svg>
+        </button>
+        <button class="tb" data-act="table" title="插入表格">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M3 10h18M9 10v9.5M15 10v9.5M3 15h18"/></svg>
+        </button>
+        <button class="tb" data-act="attach" title="插入附件">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.2 3.2 0 0 1 4.5 4.5L9.5 17a1.7 1.7 0 0 1-2.4-2.4l7.5-7.5"/></svg>
+        </button>
+        <button class="tb" data-act="image" title="插入图片">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="9.8" r="1.4"/><path d="M21 16l-4.6-4.6L6 21"/></svg>
+        </button>
         <button class="tb" data-cmd="insertUnorderedList" title="无序列表">•</button>
         <button class="tb" data-cmd="insertOrderedList" title="有序列表">1.</button>
         <button class="tb" data-act="hr" title="分割线">—</button>
@@ -310,7 +319,7 @@
   var el = {
     title: $("title"), date: $("date"), category: $("category"), slug: $("slug"),
     excerpt: $("excerpt"), status: $("status"), rich: $("richEditor"),
-    md: $("mdEditor"), mdWrap: $("mdWrap"), mdPreview: $("mdPreview").firstChild,
+    md: $("mdEditor"), mdWrap: $("mdWrap"), mdPreview: $("mdPreview").querySelector(".prose"),
     richWrap: $("richWrap"), toolbar: $("toolbar"), blockFmt: $("blockFmt"),
     postItems: $("postItems"), postCount: $("postCount"),
     pubBtn: $("pubBtn"), newBtn: $("newBtn"), newBtn2: $("newBtn2"),
@@ -515,8 +524,10 @@
         return "\n```\n" + raw + "\n```\n\n";
       }
       case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
-        var lvl = Number(tag[1]);
-        return "\n" + Array(lvl + 1).join("#") + " " + inner(node).trim() + "\n\n";
+        // 正文从 h2 起算：h2 → "#"，h3 → "##"，以此类推（与 mdToHtml 的 +1 偏移对齐，保证往返稳定）
+        var lvl = Math.max(2, Number(tag[1]));
+        var hashes = Array(lvl).join("#");
+        return "\n" + hashes + " " + inner(node).trim() + "\n\n";
       }
       case "p": return inner(node).trim() + "\n\n";
       case "blockquote": {
@@ -1151,6 +1162,9 @@
   renderMdPreview();
   loadPosts();
   setStatus(had ? "已恢复上次未发布的内容" : "就绪");
+
+  // 暴露转换器，供离线测试页调用（纯函数，无副作用）
+  window.__convert = { toMd: htmlToMd, toHtml: mdToHtml };
 })();
 </script>
 

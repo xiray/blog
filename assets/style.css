@@ -201,12 +201,15 @@ body {
 
 .search-icon {
   position: absolute;
-  left: 0;
-  font-size: 1.1rem;
+  left: 0.1rem;
+  display: flex;
+  align-items: center;
   color: var(--muted);
   pointer-events: none;
-  transform: translateY(-1px);
+  transition: color 0.18s ease;
 }
+
+.search-input-wrap:focus-within .search-icon { color: var(--accent); }
 
 #searchInput {
   width: 100%;
