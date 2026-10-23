@@ -265,6 +265,57 @@ def sync_repo(message):
     return {"ok": True, "via": via, "commit": msg}
 
 
+def local_changes():
+    """本地还没同步到 GitHub 的东西：未提交的文件 + 已提交但没推上去的提交。
+
+    删文章不再每删一篇就 commit+push（一次删除要好几十秒，还容易撞上代理不稳），
+    改成先在本地删掉、攒着，由「更新」按钮一次性推上去。这里就是攒了多少。
+    """
+    code, out, _ = run_git(["status", "--porcelain", "--"] + TRACK_PATHS)
+    lines = []
+    if code == 0:
+        for raw in out.splitlines():
+            raw = raw.rstrip()
+            if len(raw) > 3:
+                lines.append(raw)
+
+    ahead = 0
+    c2, out2, _ = run_git(["rev-list", "--count", "@{u}..HEAD"])
+    if c2 == 0:
+        try:
+            ahead = int((out2 or "0").strip())
+        except ValueError:
+            ahead = 0
+
+    return {
+        "count": len(lines),
+        "ahead": ahead,
+        "files": [(l[3:] if len(l) > 3 else l).strip() for l in lines],
+        "statuses": [l[:2] for l in lines],
+    }
+
+
+def sync_all(message=""):
+    """「更新」按钮：把本地所有改动一次提交并推上去。"""
+    ch = local_changes()
+    if not ch["count"] and not ch["ahead"]:
+        return {"ok": True, "noop": True, "count": 0, "ahead": 0,
+                "message": "没有要更新的改动，本地和线上一致"}
+
+    if not message:
+        only_del = ch["count"] and all("D" in s for s in ch["statuses"])
+        if only_del:
+            message = "delete: 同步删掉的文章（%d 个文件）" % ch["count"]
+        elif ch["count"]:
+            message = "update: 同步本地改动（%d 个文件）" % ch["count"]
+        else:
+            message = "update: 推送本地提交"
+
+    res = sync_repo(message)
+    res.update({"count": ch["count"], "ahead": ch["ahead"], "files": ch["files"][:20]})
+    return res
+
+
 # ================================================================ 基础工具
 
 def ensure_dirs():
@@ -564,12 +615,16 @@ def delete_post(slug):
         if os.path.exists(p):
             os.remove(p)
 
+    set_progress("生成", "重建首页列表与搜索索引")
     rebuild_index_list()
     rebuild_search_index()
 
-    res = sync_repo("delete: " + (src.get("title") or slug))
-    res["slug"] = slug
-    return res
+    # 只删本地，不在这里推 GitHub：删三篇要等三次推送，还得赌代理。
+    # 攒到点「更新」时一次性提交推送。
+    ch = local_changes()
+    return {"ok": True, "slug": slug, "deleted": True,
+            "pending": ch["count"], "ahead": ch["ahead"],
+            "message": "已从本地删掉，点「更新」才推到线上"}
 
 
 # ================================================================ 附件
@@ -1001,6 +1056,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/progress":
             return self._json({"ok": True, "progress": get_progress()})
 
+        if path == "/api/sync":
+            return self._json({"ok": True, "changes": local_changes()})
+
         return self._serve_static(path)
 
     def _serve_static(self, path):
@@ -1033,6 +1091,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(publish(payload))
             if path == "/api/delete":
                 return self._json(delete_post(payload.get("slug", "")))
+            if path == "/api/sync":
+                return self._json(sync_all(payload.get("message") or ""))
             if path == "/api/upload":
                 return self._json({"ok": True,
                                    "file": save_upload(payload.get("filename"),

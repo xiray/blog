@@ -231,6 +231,16 @@
   }
   .ai-dock-grip:hover { opacity: 1; }
   #aiBtn.on { border-color: var(--accent-dim); color: var(--accent); }
+
+  /* 更新按钮上那个「攒了几个改动」的小数字 */
+  #syncBtn .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.05rem; height: 1.05rem; margin-left: .3rem; padding: 0 .28rem;
+    border-radius: 999px; background: var(--accent); color: #1a1206;
+    font-size: .625rem; font-weight: 700; line-height: 1; vertical-align: 1px;
+  }
+  #syncBtn .badge[hidden] { display: none; }
+  #syncBtn.dirty { border-color: var(--accent-dim); color: var(--text); }
 </style>
 </head>
 <body>
@@ -247,6 +257,7 @@
       </div>
       <button class="ghost" id="newBtn">新建</button>
       <button class="ghost" id="aiBtn" title="AI 小窗（Shift+点击另开整页）">AI 问答</button>
+      <button class="ghost" id="syncBtn" title="把本地改动一次性推到 GitHub">更新<span class="badge" id="syncBadge" hidden></span></button>
       <button class="primary" id="pubBtn">发布</button>
     </div>
   </header>
@@ -376,7 +387,7 @@
     richWrap: $("richWrap"), toolbar: $("toolbar"), blockFmt: $("blockFmt"),
     postItems: $("postItems"), postCount: $("postCount"),
     pubBtn: $("pubBtn"), newBtn: $("newBtn"), newBtn2: $("newBtn2"),
-    aiBtn: $("aiBtn"),
+    aiBtn: $("aiBtn"), syncBtn: $("syncBtn"), syncBadge: $("syncBadge"),
     aiDock: $("aiDock"), aiDockBar: $("aiDockBar"), aiDockFrame: $("aiDockFrame"),
     aiDockFull: $("aiDockFull"), aiDockClose: $("aiDockClose"), aiDockGrip: $("aiDockGrip"),
     modeRich: $("modeRich"), modeMd: $("modeMd"),
@@ -1293,7 +1304,8 @@
 
     if (del) {
       e.stopPropagation();
-      if (!confirm("确定删除这篇文章？网站和仓库都会删掉。")) return;
+      if (!confirm("确定删除《" + (li.querySelector(".pi-title").textContent || slug) +
+        "》？\n只删本地的，点顶栏「更新」才推到 GitHub。")) return;
       setStatus("正在删除…");
       fetch("/api/delete", {
         method: "POST",
@@ -1303,9 +1315,11 @@
         .then(function (res) {
           if (!res.ok) { setStatus("删除失败：" + (res.error || ""), "err"); return; }
           if (currentSlug === slug) newPost();
-          setStatus("已删除（" + (res.via || "") + "）", "ok");
+          setStatus("已从本地删掉 · 点「更新」推上线", "ok");
           loadPosts();
-        });
+          refreshSync();
+        })
+        .catch(function () { setStatus("连不上本地服务", "err"); });
       return;
     }
     openPost(slug);
@@ -1388,6 +1402,94 @@
     } catch (e) { return false; }
   }
 
+  /* ============================================ 更新（把本地改动推到 GitHub） */
+
+  var syncing = false;
+
+  // 发布和更新都用这个：代理不稳时能看出卡在「提交」还是「推送」第几次
+  function progressPoller(t0) {
+    return setInterval(function () {
+      fetch("/api/progress", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          var p = res && res.progress;
+          if (!p || !p.stage) return;
+          var secs = Math.round((Date.now() - t0) / 1000);
+          setStatus(p.stage + (p.detail ? " · " + p.detail : "") + " · " + secs + " 秒");
+        })
+        .catch(function () {});
+    }, 700);
+  }
+
+  function paintSync(ch) {
+    var n = (ch && ch.count) || 0;
+    var ahead = (ch && ch.ahead) || 0;
+    var total = n + ahead;
+    el.syncBadge.hidden = total === 0;
+    el.syncBadge.textContent = total > 99 ? "99+" : String(total);
+    el.syncBtn.classList.toggle("dirty", total > 0);
+    if (!total) {
+      el.syncBtn.title = "本地和线上一致";
+      return;
+    }
+    var parts = [];
+    if (n) parts.push("本地有 " + n + " 个文件改动");
+    if (ahead) parts.push(ahead + " 个提交还没推上去");
+    el.syncBtn.title = parts.join("，") + "。点一下一次性推上去";
+  }
+
+  function refreshSync() {
+    fetch("/api/sync", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (res && res.ok) paintSync(res.changes); })
+      .catch(function () {});
+  }
+
+  function syncNow() {
+    if (syncing) return;
+    syncing = true;
+    el.syncBtn.disabled = true;
+    var t0 = Date.now();
+    setStatus("正在更新…");
+    var progTimer = progressPoller(t0);
+    var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var hardTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 240000);
+
+    function done() {
+      clearInterval(progTimer);
+      clearTimeout(hardTimer);
+      syncing = false;
+      el.syncBtn.disabled = false;
+    }
+
+    fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        done();
+        if (res.ok && res.noop) {
+          setStatus(res.message || "没有要更新的改动", "ok");
+        } else if (res.ok) {
+          setStatus("已更新 · " + (res.via || "直连") + " · 约 30 秒后生效", "ok");
+        } else if (res.stage === "push") {
+          setStatus("改动已提交在本地，但没推上去：" +
+            String(res.error || "").slice(0, 120) + "。网络好了再点一次「更新」。", "err");
+        } else {
+          setStatus("更新失败（" + (res.stage || "?") + "）：" + (res.error || ""), "err");
+        }
+        refreshSync();
+      })
+      .catch(function (e) {
+        done();
+        if (e && e.name === "AbortError") setStatus("等了 4 分钟还没推完，已停止等待", "err");
+        else setStatus("连不上本地服务，确认 写作台.bat 还在运行", "err");
+        refreshSync();
+      });
+  }
+
   /* ============================================ 新建 / 发布 */
 
   function newPost() {
@@ -1440,17 +1542,7 @@
     setStatus("正在发布…");
 
     // 轮询服务端进度：代理不稳时能看出卡在「提交」还是「推送」第几次
-    var progTimer = setInterval(function () {
-      fetch("/api/progress", { cache: "no-store" })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          var p = res && res.progress;
-          if (!p || !p.stage) return;
-          var secs = Math.round((Date.now() - t0) / 1000);
-          setStatus(p.stage + (p.detail ? " · " + p.detail : "") + " · " + secs + " 秒");
-        })
-        .catch(function () {});
-    }, 700);
+    var progTimer = progressPoller(t0);
 
     var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
     var hardTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 240000);
@@ -1476,6 +1568,7 @@
             (res.via || "直连") + " · 约 30 秒后生效", "ok");
           window.open(res.url, "_blank", "noopener");
           loadPosts();
+          refreshSync();
         } else if (res.stage === "push") {
           setStatus("已提交到本地，但没推上去：" +
             String(res.error || "").slice(0, 120) +
@@ -1619,6 +1712,7 @@
   el.newBtn.addEventListener("click", newPost);
   el.newBtn2.addEventListener("click", newPost);
   el.aiBtn.addEventListener("click", onAiBtn);
+  el.syncBtn.addEventListener("click", syncNow);
   el.modeRich.addEventListener("click", function () { setMode("rich"); });
   el.modeMd.addEventListener("click", function () { setMode("md"); });
 
@@ -1637,6 +1731,8 @@
   if (!el.slug.value) el.slug.value = autoSlug("");
   renderMdPreview();
   loadPosts();
+  refreshSync();
+  window.addEventListener("focus", refreshSync);
   setStatus(had ? "已恢复上次未发布的内容" : "就绪");
 
   // 暴露转换器，供离线测试页调用（纯函数，无副作用）
