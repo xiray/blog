@@ -549,6 +549,11 @@ body {
   border-radius: 8px;
 }
 
+/* 写作台里图片会被收成「文件名卡片」，正文里按普通图片显示。
+   .ic-name 只是编辑器的标签，线上不显示。 */
+.prose .img-chip { display: inline-block; max-width: 100%; }
+.prose .img-chip .ic-name { display: none; }
+
 /* 表格 */
 .prose table {
   width: 100%;

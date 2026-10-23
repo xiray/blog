@@ -179,6 +179,44 @@
   .attach:hover { border-color: var(--accent); color: var(--text) !important; }
   .attach .size { font-family: var(--mono); font-size: .6875rem; color: var(--muted); }
 
+  /* ---- 正文图片：插入时先完整显示 2 秒，然后收成「xxx.png」小卡片 ----
+     卡片底纹就是图片本身（压暗 + 轻模糊），一眼看出这是图，不是一段文字。
+     这些样式只在编辑器里生效，Markdown 预览和线上文章照常显示大图。 */
+  #richEditor .img-chip {
+    display: inline-block; position: relative; max-width: 100%;
+    vertical-align: middle; line-height: 0;
+  }
+  #richEditor .img-chip img {
+    display: block; max-width: 100%; height: auto;
+    border-radius: 7px; transition: opacity .18s ease;
+  }
+  #richEditor .img-chip .ic-name { display: none; }
+
+  #richEditor .img-chip.collapsed {
+    width: 11.5rem; height: 3.2rem; overflow: hidden; line-height: 1;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--bg-soft);
+    cursor: zoom-in;
+  }
+  #richEditor .img-chip.collapsed img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: .42; filter: blur(1px) saturate(.85);
+    border-radius: 0;
+  }
+  #richEditor .img-chip.collapsed::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(0, 0, 0, .45), rgba(0, 0, 0, .06));
+  }
+  #richEditor .img-chip.collapsed .ic-name {
+    position: absolute; inset: 0; z-index: 1; display: flex; align-items: center;
+    gap: .35rem; padding: 0 .5rem;
+    font-family: var(--mono); font-size: .6875rem; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #richEditor .img-chip.collapsed .ic-name::before {
+    content: "🖼"; font-size: .75rem; opacity: .9; flex: 0 0 auto;
+  }
+  #richEditor .img-chip:not(.collapsed) { cursor: zoom-out; }
+
   /* ---- 滚动条 ---- */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -658,6 +696,9 @@
         return "\n" + res.join("\n") + "\n\n";
       }
       case "span": {
+        // 图片卡片上的文件名只是编辑器里的装饰，转 Markdown 时丢掉，
+        // 让里面的 img 自己变成 ![alt](src)
+        if ((node.getAttribute("class") || "").indexOf("ic-name") >= 0) return "";
         var st = keepStyle(node.getAttribute("style"));
         var content = inner(node);
         if (st && content.trim()) return '<span style="' + st + '">' + content + "</span>";
@@ -733,6 +774,7 @@
       renderMdPreview();
     } else {
       el.rich.innerHTML = mdToHtml(el.md.value) || "";
+      ensureChips();
     }
 
     mode = next;
@@ -963,6 +1005,89 @@
     return (n / 1048576).toFixed(1) + " MB";
   }
 
+  /* ---- 图片卡片 -------------------------------------------------
+     插入时先完整显示 2 秒（IMG_HOLD_MS），然后收成一张「xxx.png」小卡片，
+     底纹用图片本身，点一下能来回展开/收起。
+     卡片只是编辑器里的显示方式：Markdown 预览和线上文章看到的都是原图。 */
+
+  var IMG_HOLD_MS = 2000;
+
+  function imgName(src, alt) {
+    if (alt && /\.(png|jpe?g|gif|webp|svg)$/i.test(alt)) return alt;
+    var s = String(src || "").split("?")[0].split("/").pop();
+    try { s = decodeURIComponent(s); } catch (e) {}
+    return s || "图片";
+  }
+
+  function chipOf(img, collapsed) {
+    var chip = document.createElement("span");
+    chip.className = "img-chip" + (collapsed ? " collapsed" : "");
+    chip.title = "点一下展开 / 收起";
+    var name = document.createElement("span");
+    name.className = "ic-name";
+    name.textContent = imgName(img.getAttribute("src"), img.getAttribute("alt"));
+    if (!img.getAttribute("alt")) img.setAttribute("alt", name.textContent);
+    img.parentNode.insertBefore(chip, img);
+    chip.appendChild(img);
+    chip.appendChild(name);
+    return chip;
+  }
+
+  // 给卡片补上文件名标签。insertHTML 会把 display:none 里的文字丢掉，
+  // 所以插入后统一用 JS 再填一次，别指望 HTML 字符串里带过去。
+  function labelOf(chip) {
+    var img = chip.querySelector("img");
+    if (!img) return null;
+    var name = imgName(img.getAttribute("src"), img.getAttribute("alt"));
+    var lab = chip.querySelector(".ic-name");
+    if (!lab) {
+      lab = document.createElement("span");
+      lab.className = "ic-name";
+      chip.appendChild(lab);
+    }
+    if (!lab.textContent) lab.textContent = name;
+    if (!img.getAttribute("alt")) img.setAttribute("alt", name);
+    if (!chip.title) chip.title = "点一下展开 / 收起";
+    return lab;
+  }
+
+  // 编辑器里裸着的 img 全部包成卡片（打开旧文章、Markdown 切回来、粘贴时用）
+  function ensureChips() {
+    if (!el.rich) return;
+    var chips = el.rich.querySelectorAll(".img-chip");
+    for (var j = 0; j < chips.length; j++) labelOf(chips[j]);
+
+    var imgs = el.rich.querySelectorAll("img");
+    for (var i = 0; i < imgs.length; i++) {
+      var img = imgs[i];
+      var p = img.parentNode;
+      if (p && p.classList && p.classList.contains("img-chip")) continue;
+      chipOf(img, true);
+    }
+  }
+
+  function collapseAfterHold(chip) {
+    setTimeout(function () {
+      if (!chip || !chip.isConnected) return;
+      collapseChip(chip);
+    }, IMG_HOLD_MS);
+  }
+
+  // 收起卡片；如果光标正好在卡片里面，挪到卡片后面——否则字打在看不见的地方
+  function collapseChip(chip) {
+    var sel = window.getSelection();
+    var inside = sel && sel.rangeCount && chip.contains(sel.anchorNode);
+    chip.classList.add("collapsed");
+    if (!inside) return;
+    try {
+      var r = document.createRange();
+      r.setStartAfter(chip);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch (e) {}
+  }
+
   function uploadFile(file, asImage) {
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) { setStatus("文件超过 25MB", "err"); return; }
@@ -978,18 +1103,32 @@
       }).then(function (r) { return r.json(); })
         .then(function (res) {
           if (!res.ok) { setStatus("上传失败：" + (res.error || ""), "err"); return; }
-          var f = res.file, html;
-          if (asImage || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)) {
-            html = '<p><img src="' + f.url + '" alt="' + f.display + '"></p>';
+          var f = res.file;
+          var isImg = asImage || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name);
+
+          if (isImg) {
+            if (mode === "md") {
+              // Markdown 里就是普通图片语法，右侧预览直接看到原图
+              insertAtCursor(el.md, "\n![" + f.display + "](" + f.url + ")\n");
+              renderMdPreview();
+            } else {
+              insertHtml('<p><span class="img-chip"><img src="' + f.url +
+                '" alt="' + esc(f.display) + '"><span class="ic-name">' +
+                esc(f.display) + "</span></span></p>");
+              ensureChips();   // 补回被 insertHTML 丢掉的文件名
+              var chips = el.rich.querySelectorAll(".img-chip:not(.collapsed)");
+              if (chips.length) collapseAfterHold(chips[chips.length - 1]);
+            }
           } else {
-            html = '<p><a class="attach" href="' + f.url + '" download="' + f.display + '">' +
-              "📎 " + f.display + '<span class="size">' + f.size + "</span></a></p>";
-          }
-          if (mode === "md") {
-            insertAtCursor(el.md, "\n" + html + "\n");
-            renderMdPreview();
-          } else {
-            insertHtml(html);
+            var aHtml = '<p><a class="attach" href="' + f.url + '" download="' +
+              f.display + '">📎 ' + f.display +
+              '<span class="size">' + f.size + "</span></a></p>";
+            if (mode === "md") {
+              insertAtCursor(el.md, "\n" + aHtml + "\n");
+              renderMdPreview();
+            } else {
+              insertHtml(aHtml);
+            }
           }
           if (f.compressed) {
             setStatus("已插入 " + f.display + " · 压缩 " + fmtSize(f.orig_bytes) +
@@ -1021,10 +1160,20 @@
     box.innerHTML = html;
     sanitize(box);
     document.execCommand("insertHTML", false, box.innerHTML);
+    ensureChips();
   });
 
   el.rich.addEventListener("keyup", updateToolbarState);
   el.rich.addEventListener("mouseup", updateToolbarState);
+
+  // 点一下图片卡片：展开 / 收起（只在编辑器里，线上文章始终是原图）
+  el.rich.addEventListener("click", function (e) {
+    var t = e.target;
+    var chip = t && t.closest ? t.closest(".img-chip") : null;
+    if (!chip) return;
+    if (chip.classList.contains("collapsed")) chip.classList.remove("collapsed");
+    else collapseChip(chip);
+  });
 
   /* ============================================ 引用 / 代码块的删除修复
      Chrome 的原生行为：块内文字删光后，空的 blockquote / pre 会一直留在文档里；
@@ -1345,6 +1494,7 @@
           el.rich.innerHTML = p.source || p.body_html || "";
           el.md.value = htmlToMd(el.rich.innerHTML);
         }
+        ensureChips();
         renderMdPreview();
 
         if (p.category) { window.__pendingCat = p.category; loadCategories(); }
@@ -1393,6 +1543,7 @@
       el.slug.value = d.slug || "";
       el.rich.innerHTML = d.rich || "";
       el.md.value = d.md || "";
+      ensureChips();
       currentSlug = d.currentSlug || "";
       slugTouched = !!d.slugTouched;
       if (d.category) window.__pendingCat = d.category;
