@@ -191,6 +191,46 @@
     .meta-row { grid-template-columns: 1fr 1fr; }
     .status { display: none; }
   }
+
+  /* ================= AI 小窗（悬浮，可拖可缩放） ================= */
+  .ai-dock {
+    position: fixed; z-index: 60; display: flex; flex-direction: column;
+    min-width: 320px; min-height: 240px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 20px 56px rgba(0, 0, 0, .5);
+  }
+  .ai-dock[hidden] { display: none; }
+  .ai-dock-bar {
+    flex: 0 0 auto; height: 2.15rem; display: flex; align-items: center;
+    justify-content: space-between; gap: .5rem; padding: 0 .3rem 0 .65rem;
+    background: var(--bg-soft); border-bottom: 1px solid var(--line);
+    cursor: grab; user-select: none; touch-action: none;
+  }
+  .ai-dock-bar:active { cursor: grabbing; }
+  .ai-dock-title {
+    font-family: var(--mono); font-size: .625rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); white-space: nowrap;
+  }
+  .ai-dock-btns { display: flex; gap: .25rem; }
+  .ai-dock-btns button {
+    height: 1.45rem; padding: 0 .45rem; font-size: .6875rem; line-height: 1;
+    color: var(--muted); border: 1px solid var(--line); border-radius: 4px;
+  }
+  .ai-dock-btns button:hover { color: var(--text); border-color: var(--muted); }
+  .ai-dock iframe {
+    flex: 1 1 auto; width: 100%; min-height: 0; border: none; background: var(--bg);
+  }
+  .ai-dock-grip {
+    position: absolute; right: 1px; bottom: 1px; width: 15px; height: 15px;
+    cursor: nwse-resize; z-index: 3; opacity: .55; border-radius: 2px;
+    background:
+      linear-gradient(-45deg, transparent 46%, var(--muted) 46%, var(--muted) 54%, transparent 54%)
+      right bottom / 9px 9px no-repeat,
+      linear-gradient(-45deg, transparent 46%, var(--muted) 46%, var(--muted) 54%, transparent 54%)
+      right bottom / 5px 5px no-repeat;
+  }
+  .ai-dock-grip:hover { opacity: 1; }
+  #aiBtn.on { border-color: var(--accent-dim); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -206,7 +246,7 @@
         <button id="modeMd">Markdown</button>
       </div>
       <button class="ghost" id="newBtn">新建</button>
-      <button class="ghost" id="aiBtn">AI 问答</button>
+      <button class="ghost" id="aiBtn" title="AI 小窗（Shift+点击另开整页）">AI 问答</button>
       <button class="primary" id="pubBtn">发布</button>
     </div>
   </header>
@@ -309,6 +349,18 @@
   </div>
 </div>
 
+<div class="ai-dock" id="aiDock" hidden>
+  <div class="ai-dock-bar" id="aiDockBar" title="拖住这里可以移动小窗">
+    <span class="ai-dock-title">AI 问答 · 小窗</span>
+    <div class="ai-dock-btns">
+      <button type="button" id="aiDockFull" title="在整页标签里打开">全屏</button>
+      <button type="button" id="aiDockClose" title="关掉小窗（对话不丢）">✕</button>
+    </div>
+  </div>
+  <iframe id="aiDockFrame" title="AI 问答" allow="clipboard-write"></iframe>
+  <div class="ai-dock-grip" id="aiDockGrip" title="拖动缩放"></div>
+</div>
+
 <input type="file" id="filePicker" style="display:none">
 <input type="file" id="imagePicker" accept="image/*" style="display:none">
 
@@ -325,6 +377,8 @@
     postItems: $("postItems"), postCount: $("postCount"),
     pubBtn: $("pubBtn"), newBtn: $("newBtn"), newBtn2: $("newBtn2"),
     aiBtn: $("aiBtn"),
+    aiDock: $("aiDock"), aiDockBar: $("aiDockBar"), aiDockFrame: $("aiDockFrame"),
+    aiDockFull: $("aiDockFull"), aiDockClose: $("aiDockClose"), aiDockGrip: $("aiDockGrip"),
     modeRich: $("modeRich"), modeMd: $("modeMd"),
     fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
     filePicker: $("filePicker"), imagePicker: $("imagePicker")
@@ -1443,12 +1497,128 @@
       });
   }
 
+  /* ============================================ AI 小窗（悬浮） */
+
+  var LS_DOCK = "xiray-ai-dock";
+
+  function vw() { return document.documentElement.clientWidth; }
+  function vh() { return document.documentElement.clientHeight; }
+
+  function defaultDock() {
+    var w = Math.min(430, vw() - 32);
+    var top = 64;
+    return { left: Math.max(8, vw() - w - 16), top: top, width: w, height: Math.max(260, vh() - top - 16) };
+  }
+
+  function clampDock(r) {
+    var minW = Math.min(320, vw() - 24), minH = Math.min(240, vh() - 24);
+    r.width = Math.max(minW, Math.min(r.width, vw() - 16));
+    r.height = Math.max(minH, Math.min(r.height, vh() - 16));
+    r.left = Math.max(8, Math.min(r.left, vw() - r.width - 8));
+    r.top = Math.max(8, Math.min(r.top, vh() - r.height - 8));
+    return r;
+  }
+
+  function applyDock(r) {
+    r = clampDock(r);
+    el.aiDock.style.left = r.left + "px";
+    el.aiDock.style.top = r.top + "px";
+    el.aiDock.style.width = r.width + "px";
+    el.aiDock.style.height = r.height + "px";
+    return r;
+  }
+
+  function dockRect() {
+    return {
+      left: el.aiDock.offsetLeft, top: el.aiDock.offsetTop,
+      width: el.aiDock.offsetWidth, height: el.aiDock.offsetHeight
+    };
+  }
+
+  function loadDock() {
+    try {
+      var r = JSON.parse(localStorage.getItem(LS_DOCK) || "null");
+      if (r && r.width > 200 && r.height > 200 && typeof r.left === "number" && typeof r.top === "number") return r;
+    } catch (e) {}
+    return null;
+  }
+  function saveDock() {
+    try { localStorage.setItem(LS_DOCK, JSON.stringify(dockRect())); } catch (e) {}
+  }
+
+  function openDock() {
+    if (!el.aiDockFrame.getAttribute("src")) {
+      el.aiDockFrame.src = "/ai?mini=1&embed=1";
+    }
+    if (el.aiDock.hidden) {
+      el.aiDock.hidden = false;
+      applyDock(loadDock() || defaultDock());
+    }
+    el.aiBtn.classList.add("on");
+  }
+
+  function closeDock() {
+    saveDock();                    // 先存再隐藏，隐藏后 offsetWidth 会变成 0
+    el.aiDock.hidden = true;
+    el.aiBtn.classList.remove("on");
+    setTimeout(function () { el.rich.focus(); }, 0);
+  }
+
+  function onAiBtn(e) {
+    if (e && e.shiftKey) { window.open("/ai", "_blank", "noopener"); return; }
+    if (el.aiDock.hidden) openDock(); else closeDock();
+  }
+
+  var dockDrag = null;
+
+  function startDrag(mode, e) {
+    e.preventDefault();
+    dockDrag = { mode: mode, x: e.clientX, y: e.clientY, rect: dockRect() };
+    el.aiDockFrame.style.pointerEvents = "none";
+    document.body.style.userSelect = "none";
+  }
+
+  el.aiDockBar.addEventListener("mousedown", function (e) {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    startDrag("move", e);
+  });
+  el.aiDockGrip.addEventListener("mousedown", function (e) {
+    if (e.button !== 0) return;
+    startDrag("size", e);
+  });
+
+  document.addEventListener("mousemove", function (e) {
+    if (!dockDrag) return;
+    var dx = e.clientX - dockDrag.x, dy = e.clientY - dockDrag.y;
+    var r = dockDrag.rect;
+    if (dockDrag.mode === "move") {
+      applyDock({ left: r.left + dx, top: r.top + dy, width: r.width, height: r.height });
+    } else {
+      applyDock({ left: r.left, top: r.top, width: r.width + dx, height: r.height + dy });
+    }
+  });
+
+  document.addEventListener("mouseup", function () {
+    if (!dockDrag) return;
+    dockDrag = null;
+    el.aiDockFrame.style.pointerEvents = "";
+    document.body.style.userSelect = "";
+    saveDock();
+  });
+
+  window.addEventListener("resize", function () {
+    if (!el.aiDock.hidden) applyDock(dockRect());
+  });
+
+  el.aiDockClose.addEventListener("click", closeDock);
+  el.aiDockFull.addEventListener("click", function () {
+    window.open("/ai", "_blank", "noopener");
+  });
+
   el.pubBtn.addEventListener("click", publish);
   el.newBtn.addEventListener("click", newPost);
   el.newBtn2.addEventListener("click", newPost);
-  el.aiBtn.addEventListener("click", function () {
-    window.open("/ai", "_blank", "noopener");
-  });
+  el.aiBtn.addEventListener("click", onAiBtn);
   el.modeRich.addEventListener("click", function () { setMode("rich"); });
   el.modeMd.addEventListener("click", function () { setMode("md"); });
 

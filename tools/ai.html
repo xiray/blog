@@ -40,7 +40,7 @@
   button {
     font: inherit; font-size: .875rem; padding: .4rem .9rem; border-radius: 6px;
     cursor: pointer; transition: all .15s ease; border: 1px solid transparent;
-    background: transparent; color: var(--text-dim);
+    background: transparent; color: var(--text-dim); white-space: nowrap;
   }
   button:hover { color: var(--text); }
   button.ghost { border-color: var(--line); }
@@ -215,6 +215,48 @@
   .drawer .msgline { font-size: .75rem; color: var(--muted); line-height: 1.6; }
   .drawer .msgline.ok { color: #6ee7a8; }
   .drawer .msgline.err { color: #ff8f8f; white-space: pre-wrap; }
+
+  /* ================= 小窗模式（mini） =================
+     给「一边问答一边写作」用：整体收紧，同屏能塞下完整对话。 */
+  body.mini .bar { height: 2.5rem; padding: 0 .55rem; gap: .4rem; }
+  body.mini .bar .brand { font-size: .875rem; }
+  body.mini .bar .brand span { display: none; }
+  body.mini .bar .actions { gap: .3rem; }
+  body.mini .chip { max-width: 7.5rem; font-size: .625rem; padding: .1rem .45rem; }
+  body.mini .status { max-width: 6.5rem; font-size: .6875rem; }
+  body.mini button { font-size: .8125rem; padding: .28rem .6rem; }
+  body.mini button.sm { font-size: .6875rem; padding: .2rem .5rem; }
+
+  body.mini .chat { padding: .9rem .7rem .45rem; }
+  body.mini .thread { max-width: none; gap: 1.1rem; }
+  body.mini .msg .body { font-size: .875rem; }
+  body.mini .msg .body h1, body.mini .msg .body h2, body.mini .msg .body h3,
+  body.mini .msg .body h4, body.mini .msg .body h5, body.mini .msg .body h6 {
+    font-size: .875rem;
+  }
+  body.mini .msg.user .body { max-width: 92%; }
+  body.mini .code-wrap pre { padding: .55rem .6rem; }
+  body.mini .code-wrap pre code { font-size: .75rem; }
+
+  body.mini .empty { max-width: none; margin: .5rem auto 0; }
+  body.mini .empty h1 { font-size: 1.1rem; margin-bottom: .3rem; }
+  body.mini .empty p { font-size: .8125rem; margin-bottom: .9rem; }
+  body.mini .chips { gap: .35rem; }
+  body.mini .chips button { padding: .25rem .6rem; font-size: .75rem; }
+
+  body.mini .composer { padding: .5rem .55rem .6rem; }
+  body.mini .box { padding: .3rem .45rem .3rem; border-radius: 8px; }
+  body.mini .box textarea { font-size: .875rem; padding: .2rem .25rem; max-height: 7rem; }
+  body.mini .box .hint { display: none; }
+
+  body.mini .drawer header { padding: .7rem .8rem; }
+  body.mini .drawer .inner { padding: .8rem; }
+
+  /* 窄到一定宽度就按重要性依次让位：状态 → 模型名 → 站点名 */
+  body.mini .bar .actions { flex-wrap: nowrap; }
+  @media (max-width: 460px) { body.mini .status { display: none; } }
+  @media (max-width: 400px) { body.mini .chip { max-width: 5.5rem; } }
+  @media (max-width: 345px) { body.mini .bar .brand { display: none; } }
 </style>
 </head>
 <body>
@@ -225,6 +267,7 @@
     <div class="actions">
       <span class="chip" id="modelChip">—</span>
       <span class="status" id="status">就绪</span>
+      <button class="ghost" id="sizeBtn" title="切换整页 / 小窗">小窗</button>
       <button class="ghost" id="clearBtn">清空</button>
       <button class="ghost" id="setBtn">设置</button>
     </div>
@@ -306,8 +349,42 @@
     fBase: $("fBase"), fModel: $("fModel"), fKey: $("fKey"),
     modelList: $("modelList"), saveBtn: $("saveBtn"), fetchModels: $("fetchModels"),
     drawerMsg: $("drawerMsg"), keyTip: $("keyTip"),
-    clearBtn: $("clearBtn")
+    clearBtn: $("clearBtn"), sizeBtn: $("sizeBtn")
   };
+
+  /* ---------------- 模式：整页 / 小窗 / 内嵌 ----------------
+     ?mini=1  小窗布局（独立弹窗或写作台内嵌都走这个）
+     ?embed=1 被嵌在写作台悬浮窗里，切换按钮变成「全屏」 */
+  var QS = new URLSearchParams(location.search);
+  var isMini = QS.get("mini") === "1";
+  var isEmbed = QS.get("embed") === "1";
+  if (isMini) document.body.classList.add("mini");
+  if (isEmbed) document.body.classList.add("embed");
+
+  function openMiniWindow() {
+    var w = 440;
+    var h = Math.max(520, Math.min(780, (screen.availHeight || 900) - 120));
+    var left = Math.max(0, (screen.availWidth || 1280) - w - 48);
+    var win = window.open("/ai?mini=1", "xiray-ai-mini",
+      "width=" + w + ",height=" + h + ",left=" + left + ",top=" + 72 +
+      ",resizable=yes,scrollbars=no");
+    if (win) { try { win.focus(); } catch (e) {} }
+  }
+
+  function openFullWindow() {
+    window.open("/ai", "_blank", "noopener");
+  }
+
+  if (isMini) {
+    el.sizeBtn.textContent = "全屏";
+    el.sizeBtn.title = "在新的整页标签里打开/继续这段对话";
+    el.sizeBtn.addEventListener("click", openFullWindow);
+  } else {
+    el.sizeBtn.textContent = "小窗";
+    el.sizeBtn.title = "开一个小窗口，摆在写作台旁边边问边写";
+    el.sizeBtn.addEventListener("click", openMiniWindow);
+  }
+  if (isEmbed) el.sizeBtn.hidden = true;   // 嵌在写作台里时，外面的小窗自己有「全屏」
 
   var LS_MSG = "xiray.ai.messages";
   var LS_MODEL = "xiray.ai.model";
