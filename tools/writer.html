@@ -764,6 +764,112 @@
     return root;
   }
 
+  /* ---- 深色底 / 浅色字的清洗 ----------------------------------------
+     从 VS Code、深色主题网页复制出来的内容普遍是「深色底 + 浅色字」的内联样式。
+     粘进来就是一块黑底彩字，而且 execCommand('removeFormat') 只清行内格式，
+     清不掉块级元素上的 background-color，所以「去掉格式」也去不干净。
+     这里在净化阶段直接把这一对搭配拆掉。 */
+
+  // 返回 { lum: 0~1 相对亮度, alpha } ；认不出来返回 null
+  function colorLum(v) {
+    var s = String(v || "").trim().toLowerCase();
+    if (!s) return null;
+    var r, g, b, a = 1;
+    var m = s.match(/^rgba?\(([^)]+)\)/);
+    if (m) {
+      var p = m[1].split(",").map(function (x) { return parseFloat(x); });
+      r = p[0]; g = p[1]; b = p[2];
+      if (p.length > 3) a = p[3];
+    } else if (s.charAt(0) === "#") {
+      var h = s.slice(1);
+      if (h.length === 3 || h.length === 4) {
+        h = h.split("").map(function (c) { return c + c; }).join("");
+      }
+      if (h.length !== 6 && h.length !== 8) return null;
+      r = parseInt(h.slice(0, 2), 16);
+      g = parseInt(h.slice(2, 4), 16);
+      b = parseInt(h.slice(4, 6), 16);
+      if (h.length === 8) a = parseInt(h.slice(6, 8), 16) / 255;
+    } else {
+      if (s === "black") return { lum: 0, alpha: 1 };
+      if (s === "white") return { lum: 1, alpha: 1 };
+      return null;
+    }
+    if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return null;
+    return {
+      lum: (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255,
+      alpha: isFinite(a) ? a : 1
+    };
+  }
+
+  var DARK_BG_MAX = 0.42;   // 比这更暗的背景 = 深色底，去掉
+
+  function stripDarkPaint(root) {
+    var els = Array.prototype.slice.call(root.querySelectorAll("*"));
+    if (root.nodeType === 1) els.unshift(root);
+    var darkened = [];
+
+    els.forEach(function (n) {
+      if (n.nodeName === "IMG") return;             // 图片没有底色
+      var c = colorLum(n.style.backgroundColor || n.style.background);
+      if (!c || c.alpha < 0.35 || c.lum > DARK_BG_MAX) return;
+      n.style.removeProperty("background");
+      n.style.removeProperty("background-color");
+      darkened.push(n);
+    });
+
+    // 深底被拆掉后，原本为它配的字色也得去掉：浅色字落在浅色页面上看不见，
+    // 语法高亮那一套配色也不属于这里，一律还原成站点自己的文字色
+    darkened.forEach(function (top) {
+      [top].concat(Array.prototype.slice.call(top.querySelectorAll("*"))).forEach(function (n) {
+        if (n.style && n.style.color) n.style.removeProperty("color");
+        if (n.getAttribute && n.getAttribute("color")) n.removeAttribute("color");
+      });
+    });
+    return root;
+  }
+
+  /* ---- 识别「粘进来的是代码」---------------------------------------
+     VS Code 复制的是「一行一个 div、根元素等宽字体、带深色底」的结构，
+     没有 <p>，和普通网页正文很好区分。认出来就直接落成代码块，
+     顺便把那堆着色 span 全扔掉——代码块本来就有统一的配色。 */
+
+  var MONO_RE = /(mono|consolas|menlo|monaco|courier|fira|jetbrains|cascadia|source code|ubuntu mono)/i;
+
+  function looksLikeCode(root, text) {
+    var pre = root.querySelector("pre");
+    if (pre) {
+      // 有 pre 不代表整段都是代码：正文里夹一段代码时，pre 只占一小部分，
+      // 这种按普通内容插，只有「几乎全是代码」才转成代码块
+      var preLen = preText(pre).replace(/\s/g, "").length;
+      var allLen = String(text || "").replace(/\s/g, "").length;
+      return allLen === 0 || preLen / allLen > 0.7;
+    }
+    var lines = String(text || "").split("\n").filter(function (l) { return l.trim(); });
+    if (lines.length < 2) return false;
+    if (root.querySelector("p")) return false;   // 有段落结构的是正文，不是代码
+    var els = [root].concat(Array.prototype.slice.call(root.querySelectorAll("*")));
+    var mono = els.some(function (n) {
+      return n.style && MONO_RE.test(n.style.fontFamily || "");
+    });
+    if (!mono) return false;
+    // 还得是「深色底」或「white-space: pre」——IDE / 终端复制出来的特征，
+    // 免得把某些用 div 排版、带等宽行内码的网页正文整段当代码吞掉
+    var dark = els.some(function (n) {
+      var c = colorLum(n.style.backgroundColor || n.style.background);
+      return c && c.alpha >= 0.35 && c.lum <= DARK_BG_MAX;
+    });
+    return dark || /white-space:\s*pre/i.test(root.innerHTML);
+  }
+
+  // 代码块内容：纯文本，保留换行，去掉行尾空白和首尾空行
+  function codeTextOf(box) {
+    return preText(box)
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+$/gm, "")
+      .replace(/^\n+|\n+$/g, "");
+  }
+
   /* ============================================ 模式切换 */
 
   function setMode(next) {
@@ -820,6 +926,7 @@
   }
 
   function exec(cmd, value) {
+    if (cmd === "removeFormat") return clearFormat();
     restoreSelection();
     el.rich.focus();
     try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
@@ -833,6 +940,60 @@
     el.rich.focus();
     document.execCommand("insertHTML", false, html);
     saveSelection();
+  }
+
+  /* 代码块插完必须在后面补一个空段落，否则光标困在 pre 里出不去，
+     想在代码块下面接着写正文就没地方落笔。 */
+
+  // 光标所在的最内层块（P / H* / LI / DIV / PRE / BLOCKQUOTE），没有就返回 el.rich
+  function blockHostAtCaret() {
+    var s = window.getSelection();
+    if (!s || !s.rangeCount) return el.rich;
+    var e = s.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement);
+    while (e && e !== el.rich) {
+      if (/^(P|H1|H2|H3|H4|H5|H6|LI|DIV|BLOCKQUOTE|PRE)$/.test(e.nodeName)) return e;
+      e = e.parentElement;
+    }
+    return el.rich;
+  }
+
+  /* 代码块不能用 insertHTML 插：光标在段落里的时候，Chrome 认为 <pre> 嵌在 <p> 里非法，
+     会把它拆成一堆带等宽字体的 <span>——看起来像代码框，实际根本写不了代码。
+     所以直接建 DOM 节点，插在当前段落下面。 */
+  function insertCodeBlock(text) {
+    var pre = document.createElement("pre");
+    var code = document.createElement("code");
+    code.textContent = text == null ? "" : String(text);
+    pre.appendChild(code);
+
+    var host = blockHostAtCaret();
+    if (!host || host === el.rich) {
+      el.rich.appendChild(pre);
+    } else if (host.nodeName === "P" && isEmptyBlock(host)) {
+      // 光标停在一个空行上：直接占掉这一行，代码块就出现在他想要的位置
+      host.parentNode.replaceChild(pre, host);
+    } else {
+      // 引用 / 列表 / 表格里不放代码块，挂到它们外面
+      var outer = host;
+      while (outer.parentElement && outer.parentElement !== el.rich &&
+             /^(BLOCKQUOTE|LI|UL|OL|TD|TH)$/.test(outer.parentElement.nodeName)) {
+        outer = outer.parentElement;
+      }
+      outer.parentNode.insertBefore(pre, outer.nextSibling);
+    }
+
+    ensureTailPara(pre);
+    return pre;
+  }
+
+  // 某块之后没有能落笔的段落时补一个（代码块 / 引用 / 表格后面最容易卡住）
+  function ensureTailPara(block) {
+    var next = block.nextElementSibling;
+    if (next && next.nodeName !== "BR") return next;
+    var p = document.createElement("p");
+    p.innerHTML = "<br>";
+    block.parentNode.insertBefore(p, next || null);
+    return p;
   }
 
   function updateToolbarState() {
@@ -916,16 +1077,19 @@
     var v = el.blockFmt.value;
     if (mode === "md") {
       var prefix = { p: "", h2: "## ", h3: "### ", h4: "#### ", blockquote: "> ", pre: "```\n\n```" }[v] || "";
+      var st = el.md.selectionStart;
       insertAtCursor(el.md, prefix);
+      // 代码块插完把光标放进两行 ``` 中间，直接就能写
+      if (v === "pre") el.md.selectionStart = el.md.selectionEnd = st + 4;
       renderMdPreview();
       el.blockFmt.value = "p";
       return;
     }
     if (v === "pre") {
-      insertHtml('<pre><code>代码</code></pre>');
+      var made = insertCodeBlock("代码");
       // 插入后把光标圈到「代码」上，直接输入就替换掉
       try {
-        var code = el.rich.querySelector("pre:last-of-type code");
+        var code = made && made.querySelector("code");
         if (code) {
           var r = document.createRange();
           r.selectNodeContents(code);
@@ -1064,6 +1228,16 @@
       if (p && p.classList && p.classList.contains("img-chip")) continue;
       chipOf(img, true);
     }
+    ensureEditableTail();
+  }
+
+  // 最后一个块是代码块 / 引用 / 表格 / 列表 / 分割线时，末尾补一个空段落，
+  // 否则打开旧文章或者从 Markdown 切回来，光标没法落到下面继续写。
+  function ensureEditableTail() {
+    if (!el.rich) return;
+    var last = el.rich.lastElementChild;
+    if (!last) return;
+    if (/^(PRE|BLOCKQUOTE|TABLE|UL|OL|HR)$/.test(last.nodeName)) ensureTailPara(last);
   }
 
   function collapseAfterHold(chip) {
@@ -1149,16 +1323,108 @@
     uploadFile(this.files[0], true); this.value = "";
   });
 
+  /* 「清除格式」得自己动手：execCommand('removeFormat') 只处理行内格式，
+     块级元素（div/p/pre）上的 color / background-color 它一概不动，
+     从别处粘来的黑底就卡在这上面，所以再扫一遍选区把内联样式硬清掉。 */
+  function clearFormat() {
+    restoreSelection();
+    el.rich.focus();
+    try { document.execCommand("removeFormat"); } catch (e) {}
+
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+
+    function clean(n) {
+      if (!n || n.nodeType !== 1 || n === el.rich) return;
+      if (n.classList && n.classList.contains("img-chip")) return;  // 图片卡片的显示状态别动
+      n.removeAttribute("style");
+      ["color", "bgcolor", "face", "align"].forEach(function (a) { n.removeAttribute(a); });
+    }
+
+    var r = sel.getRangeAt(0).cloneRange();
+    if (r.collapsed) {
+      var anchor = sel.anchorNode;
+      var blk = leafBlockOf(anchor, el.rich) ||
+        (anchor && (anchor.nodeType === 1 ? anchor : anchor.parentElement));
+      if (!blk || blk === el.rich) { setStatus("先把要清格式的文字选上"); return; }
+      clean(blk);
+      Array.prototype.forEach.call(blk.querySelectorAll("*"), clean);
+    } else {
+      Array.prototype.forEach.call(el.rich.querySelectorAll("*"), function (n) {
+        if (r.intersectsNode(n)) clean(n);
+      });
+    }
+
+    saveSelection();
+    updateToolbarState();
+    setStatus("已清除格式", "ok");
+  }
+
   /* ============================================ 粘贴净化 */
+
+  // 已经在代码块里粘贴：只要纯文本，换行原样保留，不再套一层代码块
+  function pasteIntoPre(pre, text) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var r = sel.getRangeAt(0);
+    r.deleteContents();
+    var txt = String(text).replace(/\r\n?/g, "\n");
+    // 光标停在一行中间时先补个换行，免得新代码跟上一行粘在一起
+    var before = "";
+    try {
+      var probe = document.createRange();
+      probe.selectNodeContents(pre);
+      probe.setEnd(r.startContainer, r.startOffset);
+      before = probe.toString().replace(/\u200b/g, "");
+    } catch (e) {}
+    if (before && !/\n$/.test(before) && txt && !/^\n/.test(txt)) txt = "\n" + txt;
+    var tn = document.createTextNode(txt);
+    r.insertNode(tn);
+    var after = document.createRange();
+    after.setStartAfter(tn);
+    after.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(after);
+    saveSelection();
+  }
 
   el.rich.addEventListener("paste", function (e) {
     var cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
     var html = cd.getData("text/html");
-    if (!html) return;
+    var plain = cd.getData("text/plain") || "";
+    var sel = window.getSelection();
+    var host = sel && sel.rangeCount ? blockOf(sel.anchorNode) : null;
+
+    if (host && host.nodeName === "PRE") {
+      e.preventDefault();
+      pasteIntoPre(host, plain);
+      return;
+    }
+
+    if (!html) return;   // 纯文本：交给浏览器默认插入
+
     e.preventDefault();
     var box = document.createElement("div");
     box.innerHTML = html;
+    // 判定要用净化前的副本：sanitize 只保留颜色，会把 font-family 裁掉，
+    // 那样就认不出「这是 IDE 里复制来的代码」了
+    var probe = box.cloneNode(true);
     sanitize(box);
+
+    // 整段是代码就直接转成代码块：VS Code 的黑底彩字进不来，缩进也保住
+    var raw = codeTextOf(probe);
+    if (looksLikeCode(probe, raw)) {
+      var pre = insertCodeBlock(raw);
+      if (pre) {
+        if (raw) placeCaret(pre, true);
+        saveSelection();
+      }
+      ensureChips();
+      return;
+    }
+
+    stripDarkPaint(box);
     document.execCommand("insertHTML", false, box.innerHTML);
     ensureChips();
   });
@@ -1270,6 +1536,32 @@
     return r.toString().replace(/[\s\u00a0\u200b]/g, "") === "";
   }
 
+  function caretAtEnd(b) {
+    var s = window.getSelection();
+    if (!s || !s.rangeCount) return false;
+    var r = s.getRangeAt(0).cloneRange();
+    r.selectNodeContents(b);
+    r.setStart(s.getRangeAt(0).endContainer, s.getRangeAt(0).endOffset);
+    return r.toString().replace(/[\s\u00a0\u200b]/g, "") === "";
+  }
+
+  // 光标在代码块最后一行，而且那行是空的
+  function atEmptyLastLine(pre) {
+    if (!caretAtEnd(pre)) return false;
+    return /\n$/.test(preText(pre));
+  }
+
+  // 跳出代码块：收掉末尾的空行，光标落到后面的段落里
+  function leavePre(pre) {
+    var txt = preText(pre).replace(/\n+$/, "");
+    var code = document.createElement("code");
+    code.textContent = txt;
+    pre.innerHTML = "";
+    pre.appendChild(code);
+    var p = ensureTailPara(pre);
+    placeCaret(p, false);
+  }
+
   // 光标所在的最内层段落（blockquote > p 里的 p）
   function leafBlockOf(node, root) {
     var n = node && (node.nodeType === 1 ? node : node.parentElement);
@@ -1291,6 +1583,12 @@
     // 零宽字符只在编辑区里存在，转 Markdown 时由 preText() 剥掉。
     if (e.key === "Enter" && b.nodeName === "PRE") {
       e.preventDefault();
+      // 最后一行已经是空行再按回车 = 跳出代码块，到下面写正文去
+      if (atEmptyLastLine(b)) {
+        leavePre(b);
+        updateToolbarState();
+        return;
+      }
       var r0 = sel.getRangeAt(0);
       r0.deleteContents();
       var br = document.createElement("br");
@@ -1509,7 +1807,8 @@
     if (mode === "rich") {
       var clone = el.rich.cloneNode(true);
       sanitize(clone);
-      return clone.innerHTML;
+      // 代码块回车用的零宽锚点只在编辑器里有用，别带进线上文章
+      return clone.innerHTML.replace(/\u200b/g, "");
     }
     return mdToHtml(el.md.value);
   }
