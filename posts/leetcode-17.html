@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetCode 17 电话号码的字母组合：我踩过的几个递归坑 — xiray</title>
+<meta name="description" content="leetcode-17 一道看似简单却有重重陷阱的题">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>LeetCode 17 电话号码的字母组合：我踩过的几个递归坑</h1>
+      <p class="article-meta">2026 · 10 · 23
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 2 分钟</p>
+    </header>
+
+    <div class="prose">
+<h3>1.重复枚举</h3>
+<blockquote><p>给定一个仅包含数字 2-9 的字符串，返回所有它能表示的字母组合</p></blockquote>
+<p>因为电话号码的位数&lt;span style="color: rgb(255, 0, 0)"&gt;不确定，&lt;/span&gt;所以正常的循环嵌套不能使用，需要用递归：先枚举第一位，再调用函数本身枚举第2位，以此类推。</p>
+<pre><code>结构为：
+f(str, i)   i &lt; n ?    true:     f(str, i + 1)
+                       false:    return</code></pre>
+<p>但是每次枚举完，本轮的上一个答案因为没有删除字符串的末尾，所以会造成多个字母的连接，导致WA，所以每次枚举完需要pop_back 掉枚举出来的字符串的最后一位，保证枚举的结果不重叠。</p>
+<h3>2.类型错误</h3>
+<p>判定电话号码的第几位不能直接使用，因为他的格式是char，转换为int会导致索引出错，如字符'1'的ASCII编码为49，而实际使用的应为1。因为连个字符之间可以直接相减得到对应的编码，且0~9的编码是连续的，所以可以令int a = '1' - '0'，把char类型的数字转为int类型。</p>
+<pre><code>(int)'1' = 49
+(int)'0' = 48
+'1' - '0' =1
+所以可建立函数：
+int to_int(char a) {
+  if(a &gt;= '0' &amp;&amp; a &lt; = '9') return a - '0';
+}
+
+输入： '7'
+输出：7      '7' - '0' = 55 - 48 = 7</code></pre>
+<h3>3.总结</h3>
+<p>这道题我主要使用递归的方法实现，枚举每位字母，实现方法如下：</p>
+<pre><code>#include&lt;bits/stdc++.h&gt;
+using namespace std;
+class Solution {
+public:
+    vector&lt;string&gt; ans;
+    string now_fixing;
+    string a[10] = {"no", "no", "abc", "def", "ghi", "jkl", "mno", "pqrs", "tuv", "wxyz"};
+    void sol(string &amp; str, int i) {
+        if(i == str.size()) {
+            ans.push_back(now_fixing);
+            return;
+        }
+        for(char chr : a[str[i] - '0']) {
+            now_fixing += chr;
+            sol(str, i + 1);
+            now_fixing.pop_back();
+        }
+    }
+    vector&lt;string&gt; letterCombinations(string digits) {
+        sol(digits, 0);
+        return ans;
+    }
+};</code></pre>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
