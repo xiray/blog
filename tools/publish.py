@@ -18,6 +18,7 @@ xiray 博客写作台 —— 本地服务
 """
 
 import base64
+import io
 import json
 import os
 import re
@@ -38,6 +39,15 @@ try:
 except ImportError:
     webbrowser = None
 
+# 图片压缩用 Pillow。没装就跳过压缩，不影响其它功能。
+try:
+    from PIL import Image, ImageOps
+    _RESAMPLE = getattr(Image, "Resampling", Image).LANCZOS
+except Exception:
+    Image = None
+    ImageOps = None
+    _RESAMPLE = None
+
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,6 +61,38 @@ PORT = 5178
 SITE = "https://xiray.github.io/blog"
 
 DEFAULT_CATS = ["代码编写", "Agent 编程", "折腾记录", "游戏", "前端"]
+
+# 图片压缩参数
+IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+IMG_MAX_SIDE = 1600          # 长边上限（px）
+IMG_QUALITY = 82             # JPEG / WebP 质量
+IMG_MIN_BYTES = 120 * 1024   # 小于这个体积的图不值得重压
+
+# 搜索索引里每篇保留的正文字数（用于全文搜索，不是全文备份）
+SEARCH_TEXT_LIMIT = 2500
+
+# ================================================================ 发布进度
+# 服务端在发布过程中更新这里，前端轮询 /api/progress 显示当前卡在哪一步。
+
+_PROGRESS = {"stage": "", "detail": "", "at": 0.0}
+_PROGRESS_LOCK = threading.Lock()
+
+
+def set_progress(stage, detail=""):
+    with _PROGRESS_LOCK:
+        _PROGRESS["stage"] = stage
+        _PROGRESS["detail"] = detail
+        _PROGRESS["at"] = time.time()
+
+
+def get_progress():
+    with _PROGRESS_LOCK:
+        return dict(_PROGRESS)
+
+
+def clear_progress():
+    set_progress("", "")
+
 
 # ================================================================ 代理探测
 
@@ -189,6 +231,8 @@ def git_push():
     last = ""
     for attempt in range(3):
         proxy = find_proxy(force=(attempt > 0))
+        set_progress("推送", "第 %d 次尝试%s" % (
+            attempt + 1, ("（代理 " + proxy + "）") if proxy else "（直连）"))
         if proxy:
             cfg = ["-c", "http.proxy=" + proxy, "-c", "https.proxy=" + proxy]
         else:
@@ -202,6 +246,7 @@ def git_push():
 
 
 def sync_repo(message):
+    set_progress("提交", "git add / commit")
     ok, msg = git_commit(message)
     if not ok:
         return {"ok": False, "stage": "commit", "error": msg}
@@ -343,6 +388,11 @@ LIST_ITEM = u"""    <li data-slug="{slug}" data-date="{date}" data-category="{ca
       <span class="post-cat">{category}</span>
     </li>"""
 
+YEAR_HEAD = u"""    <li class="year-head" data-year="{year}">
+      <span class="year-label">{year}</span>
+      <span class="year-count">{count} 篇</span>
+    </li>"""
+
 
 def build_article(meta, body_html):
     return ARTICLE.format(
@@ -381,16 +431,33 @@ def list_posts():
 
 
 def rebuild_index_list():
-    """按 sources 重建 index.html 的列表（唯一真源 = tools/sources/*.json）"""
+    """按 sources 重建 index.html 的列表（唯一真源 = tools/sources/*.json）
+
+    文章按年份分组：每年插一条 year-head 分隔行，列表本身仍是 flat <li>，
+    这样首页筛选逻辑（找 li[data-slug]）不用改。
+    """
     posts = list_posts()
-    items = [LIST_ITEM.format(
-        slug=p["slug"],
-        date=esc(p["date"]),
-        date_dots=esc(date_dots(p["date"])),
-        category=esc(p.get("category") or "未分类"),
-        title=esc(p["title"]),
-        excerpt=esc(p.get("excerpt") or p["title"]),
-    ) for p in posts]
+
+    year_count = {}
+    for p in posts:
+        y = (p["date"] or "")[:4] or "未标日期"
+        year_count[y] = year_count.get(y, 0) + 1
+
+    items = []
+    current_year = None
+    for p in posts:
+        year = (p["date"] or "")[:4] or "未标日期"
+        if year != current_year:
+            items.append(YEAR_HEAD.format(year=esc(year), count=year_count[year]))
+            current_year = year
+        items.append(LIST_ITEM.format(
+            slug=p["slug"],
+            date=esc(p["date"]),
+            date_dots=esc(date_dots(p["date"])),
+            category=esc(p.get("category") or "未分类"),
+            title=esc(p["title"]),
+            excerpt=esc(p.get("excerpt") or p["title"]),
+        ))
 
     idx_path = os.path.join(ROOT, "index.html")
     with open(idx_path, "r", encoding="utf-8") as f:
@@ -410,16 +477,21 @@ def rebuild_search_index():
     items = []
     for p in list_posts():
         src = read_source(p["slug"]) or {}
+        plain = strip_html(src.get("body_html") or "")
         items.append({
             "slug": p["slug"],
             "title": p["title"],
             "date": p["date"],
             "category": p.get("category") or "未分类",
             "excerpt": p.get("excerpt") or "",
-            "text": strip_html(src.get("body_html") or "")[:4000],
+            "text": plain[:SEARCH_TEXT_LIMIT],
         })
-    write_json(SEARCH_FILE, {"updated": time.strftime("%Y-%m-%d %H:%M"),
-                             "items": items})
+    data = {"updated": time.strftime("%Y-%m-%d %H:%M"), "items": items}
+    # 索引用紧凑格式写：它只给浏览器读，不需要缩进。去掉缩进能省一半体积。
+    tmp = SEARCH_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp, SEARCH_FILE)
 
 
 # ================================================================ 发布 / 删除
@@ -441,6 +513,8 @@ def publish(payload):
         raise ValueError("正文是空的")
 
     existed = os.path.exists(src_path(slug))
+
+    set_progress("生成", "写入文章与首页列表")
 
     meta = {
         "slug": slug,
@@ -494,6 +568,55 @@ def delete_post(slug):
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._\u4e00-\u9fa5-]+")
 
 
+def human_size(n):
+    if n < 1024:
+        return "%d B" % n
+    if n < 1048576:
+        return "%.0f KB" % (n / 1024.0)
+    return "%.1f MB" % (n / 1048576.0)
+
+
+def compress_image(raw, ext):
+    """压缩图片。返回 (数据, 是否压缩过, 说明)。
+
+    · 只处理 jpg/jpeg/png/webp；gif 不动（会丢帧），svg 不动
+    · 长边超过 IMG_MAX_SIDE 才缩放
+    · 压缩后反而更大就保留原图
+    · 没装 Pillow 直接原样返回，不影响上传
+    """
+    if Image is None or ext not in IMG_EXTS:
+        return raw, False, ""
+    if len(raw) < IMG_MIN_BYTES:
+        return raw, False, ""
+    try:
+        im = Image.open(io.BytesIO(raw))
+        im.load()
+        im = ImageOps.exif_transpose(im)   # 手机拍的竖图别躺倒
+
+        w, h = im.size
+        scale = min(1.0, float(IMG_MAX_SIDE) / max(w, h))
+        if scale < 1.0:
+            im = im.resize((max(1, int(round(w * scale))), max(1, int(round(h * scale)))),
+                           _RESAMPLE)
+
+        out = io.BytesIO()
+        if ext in (".jpg", ".jpeg"):
+            im.convert("RGB").save(out, "JPEG", quality=IMG_QUALITY,
+                                   optimize=True, progressive=True)
+        elif ext == ".webp":
+            im.save(out, "WEBP", quality=IMG_QUALITY, method=4)
+        else:  # png：保留透明通道，只做尺寸缩放 + 无损优化
+            im = im.convert("RGBA") if im.mode in ("RGBA", "LA", "P") else im.convert("RGB")
+            im.save(out, "PNG", optimize=True)
+
+        data = out.getvalue()
+        if len(data) >= len(raw) * 0.95:
+            return raw, False, ""
+        return data, True, "%dx%d" % im.size
+    except Exception:
+        return raw, False, ""
+
+
 def save_upload(filename, b64data):
     if not b64data:
         raise ValueError("附件内容为空")
@@ -508,20 +631,16 @@ def save_upload(filename, b64data):
     stem = SAFE_NAME.sub("-", stem)[:60] or "file"
     name = "%s-%s%s" % (time.strftime("%Y%m%d%H%M%S"), stem, ext.lower())
 
+    data, compressed, note = compress_image(raw, ext.lower())
+
     os.makedirs(FILES, exist_ok=True)
     with open(os.path.join(FILES, name), "wb") as f:
-        f.write(raw)
+        f.write(data)
 
-    size = len(raw)
-    if size < 1024:
-        human = "%d B" % size
-    elif size < 1048576:
-        human = "%.0f KB" % (size / 1024.0)
-    else:
-        human = "%.1f MB" % (size / 1048576.0)
-
-    return {"name": name, "display": base, "size": human,
-            "url": "../files/" + name, "bytes": size}
+    return {"name": name, "display": base,
+            "size": human_size(len(data)), "url": "../files/" + name,
+            "bytes": len(data), "orig_bytes": len(raw),
+            "compressed": compressed, "note": note}
 
 
 # ================================================================ HTTP
@@ -583,6 +702,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/categories":
             return self._json({"ok": True, "categories": load_categories()})
+
+        if path == "/api/progress":
+            return self._json({"ok": True, "progress": get_progress()})
 
         return self._serve_static(path)
 
@@ -659,7 +781,31 @@ class Handler(BaseHTTPRequestHandler):
 def serve():
     ensure_dirs()
     load_categories()
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+
+    # 单实例保护：Windows 上 SO_REUSEADDR 允许两个进程绑同一端口，
+    # 结果请求被旧进程接走、新接口全 404 但页面看着是新的，极难排查。
+    existing = probe_running()
+    if existing is not None:
+        print("")
+        print("  写作台已经在运行了：http://127.0.0.1:%d" % PORT)
+        if existing and os.path.normpath(existing) != os.path.normpath(ROOT):
+            print("  注意：它服务的目录是 %s" % existing)
+            print("  不是当前目录 %s" % ROOT)
+        print("  这次不重复启动。已帮你打开浏览器，直接用那个窗口就行。")
+        print("")
+        if webbrowser:
+            webbrowser.open("http://127.0.0.1:%d" % PORT)
+        return
+
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError as e:
+        print("")
+        print("  端口 %d 绑不上：%s" % (PORT, e))
+        print("  可能有别的程序占着这个端口。换个端口就改 tools/publish.py 里的 PORT。")
+        print("")
+        sys.exit(1)
+
     print("")
     print("  xiray 写作台已启动")
     print("  地址: http://127.0.0.1:%d" % PORT)
@@ -672,6 +818,19 @@ def serve():
         srv.serve_forever()
     except KeyboardInterrupt:
         pass
+
+
+def probe_running():
+    """探测端口上是不是已经跑着一个写作台。返回它的 ROOT（空串表示无法确认），没在跑返回 None。"""
+    try:
+        req = urllib.request.Request("http://127.0.0.1:%d/api/info" % PORT)
+        with urllib.request.urlopen(req, timeout=1.5) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        if isinstance(data, dict) and "root" in data and "site" in data:
+            return data.get("root") or ""
+    except Exception:
+        pass
+    return None
 
 
 def main():

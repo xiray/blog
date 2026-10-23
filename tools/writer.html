@@ -889,6 +889,13 @@
 
   /* ============================================ 附件 / 图片 */
 
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return Math.round(n / 1024) + " KB";
+    return (n / 1048576).toFixed(1) + " MB";
+  }
+
   function uploadFile(file, asImage) {
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) { setStatus("文件超过 25MB", "err"); return; }
@@ -917,7 +924,12 @@
           } else {
             insertHtml(html);
           }
-          setStatus("已插入 " + f.display, "ok");
+          if (f.compressed) {
+            setStatus("已插入 " + f.display + " · 压缩 " + fmtSize(f.orig_bytes) +
+              " → " + f.size + " · " + (f.note || ""), "ok");
+          } else {
+            setStatus("已插入 " + f.display + "（" + f.size + "）", "ok");
+          }
         })
         .catch(function () { setStatus("上传出错", "err"); });
     };
@@ -1368,15 +1380,39 @@
     };
 
     el.pubBtn.disabled = true;
+    var t0 = Date.now();
     setStatus("正在发布…");
+
+    // 轮询服务端进度：代理不稳时能看出卡在「提交」还是「推送」第几次
+    var progTimer = setInterval(function () {
+      fetch("/api/progress", { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          var p = res && res.progress;
+          if (!p || !p.stage) return;
+          var secs = Math.round((Date.now() - t0) / 1000);
+          setStatus(p.stage + (p.detail ? " · " + p.detail : "") + " · " + secs + " 秒");
+        })
+        .catch(function () {});
+    }, 700);
+
+    var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var hardTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 240000);
+
+    function finish() {
+      clearInterval(progTimer);
+      clearTimeout(hardTimer);
+      el.pubBtn.disabled = false;
+    }
 
     fetch("/api/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: ctrl ? ctrl.signal : undefined
     }).then(function (r) { return r.json(); })
       .then(function (res) {
-        el.pubBtn.disabled = false;
+        finish();
         if (res.ok) {
           currentSlug = res.slug;
           slugTouched = true;
@@ -1384,14 +1420,23 @@
             (res.via || "直连") + " · 约 30 秒后生效", "ok");
           window.open(res.url, "_blank", "noopener");
           loadPosts();
+        } else if (res.stage === "push") {
+          setStatus("已提交到本地，但没推上去：" +
+            String(res.error || "").slice(0, 120) +
+            "。网络好了再点一次发布即可（不会产生重复文章）。", "err");
         } else {
           setStatus("失败（" + (res.stage || "?") + "）：" + (res.error || ""), "err");
           console.error(res);
         }
       })
       .catch(function (e) {
-        el.pubBtn.disabled = false;
-        setStatus("连不上本地服务，确认 写作台.bat 还在运行", "err");
+        finish();
+        if (e && e.name === "AbortError") {
+          setStatus("等了 4 分钟还没推完，已停止等待。本地文件可能已经改好了，" +
+            "检查代理后点一次发布重试。", "err");
+        } else {
+          setStatus("连不上本地服务，确认 写作台.bat 还在运行", "err");
+        }
         console.error(e);
       });
   }

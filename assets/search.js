@@ -22,17 +22,27 @@
   var items = Array.prototype.slice.call(list.querySelectorAll("li[data-slug]"));
   var indexMap = {};
 
-  /* ---------------- 索引 ---------------- */
+  /* ---------------- 索引（懒加载） ----------------
+     首屏不下载索引，只有真的要搜关键词时才拉。类别/日期筛选直接走 DOM，
+     不依赖这份文件。这样首页即便文章很多也不会被索引拖慢。 */
 
-  function loadIndex() {
-    return fetch("search-index.json", { cache: "no-cache" })
+  var indexLoaded = false;
+  var indexLoading = null;
+
+  function ensureIndex() {
+    if (indexLoaded) return Promise.resolve();
+    if (indexLoading) return indexLoading;
+    indexLoading = fetch("search-index.json", { cache: "no-cache" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         (data.items || []).forEach(function (it) {
           indexMap[it.slug] = it;
         });
+        indexLoaded = true;
       })
-      .catch(function () { /* 索引拿不到就只搜 DOM 里的可见文本 */ });
+      .catch(function () { /* 拿不到索引就只搜 DOM 里的可见文本 */ })
+      .then(function () { indexLoading = null; });
+    return indexLoading;
   }
 
   /* ---------------- 类别下拉 ---------------- */
@@ -79,6 +89,20 @@
     ].join(" ").toLowerCase();
   }
 
+  /* 年份分隔行：某一年下面一条都没显示时，把这个年份头也藏掉 */
+  function syncYearHeads() {
+    var heads = list.querySelectorAll("li.year-head");
+    Array.prototype.forEach.call(heads, function (head) {
+      var n = head.nextElementSibling;
+      var visible = false;
+      while (n && !n.classList.contains("year-head")) {
+        if (n.style.display !== "none") { visible = true; break; }
+        n = n.nextElementSibling;
+      }
+      head.style.display = visible ? "" : "none";
+    });
+  }
+
   function apply() {
     var kw = (input.value || "").trim().toLowerCase();
     var cat = catFilter.value;
@@ -100,6 +124,8 @@
       if (ok) shown++;
     });
 
+    syncYearHeads();
+
     var filtering = !!(kw || cat || f || t);
     if (noResult) noResult.hidden = !(shown === 0 && items.length > 0 && filtering);
     if (resultCount) {
@@ -115,7 +141,10 @@
   var timer = null;
   input.addEventListener("input", function () {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(apply, 120);
+    timer = setTimeout(function () {
+      // 第一次搜索时才去拿全文索引，拿完再过滤
+      ensureIndex().then(apply);
+    }, 120);
   });
 
   [catFilter, dateFrom, dateTo].forEach(function (n) {
@@ -146,5 +175,4 @@
 
   fillCategories();
   apply();
-  loadIndex().then(apply);
 })();

@@ -337,6 +337,40 @@ body {
   transform: translateX(0.25rem);
 }
 
+/* 年份分隔行 */
+.post-list .year-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 2.25rem 0 0.5rem;
+  border-top: none;
+}
+
+.post-list .year-head:first-child {
+  padding-top: 0.6rem;
+}
+
+.post-list .year-head .year-label {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+}
+
+.post-list .year-head .year-count {
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.post-list .year-head::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
 .post-list .date {
   display: block;
   font-family: var(--mono);
