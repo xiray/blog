@@ -9,266 +9,186 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 <style>
   html, body { height: 100%; overflow: hidden; }
+  .app { display: flex; flex-direction: column; height: 100vh; }
 
-  .app {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-  }
-
-  /* ---------------- 顶栏 ---------------- */
+  /* ================= 顶栏 ================= */
   .bar {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0 1.25rem;
-    height: 3.5rem;
-    border-bottom: 1px solid var(--line);
-    background: var(--bg-soft);
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 0 1rem; height: 3.25rem;
+    border-bottom: 1px solid var(--line); background: var(--bg-soft);
   }
-
-  .bar .brand {
-    font-family: var(--serif);
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-  }
-
+  .bar .brand { font-family: var(--serif); font-size: 1rem; font-weight: 600; white-space: nowrap; }
   .bar .brand span {
-    color: var(--muted);
-    font-family: var(--sans);
-    font-size: 0.8125rem;
-    font-weight: 400;
-    margin-left: 0.5rem;
-    letter-spacing: 0.08em;
+    color: var(--muted); font-family: var(--sans); font-size: .8125rem;
+    font-weight: 400; margin-left: .5rem; letter-spacing: .08em;
   }
-
-  .bar .actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
+  .bar .actions { display: flex; align-items: center; gap: .625rem; }
 
   .status {
-    font-size: 0.8125rem;
-    color: var(--muted);
-    max-width: 30rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: .8125rem; color: var(--muted); max-width: 24rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
   .status.ok { color: #6ee7a8; }
   .status.err { color: #ff8f8f; }
 
   button {
-    font: inherit;
-    font-size: 0.875rem;
-    padding: 0.45rem 1rem;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.16s ease;
-    border: 1px solid transparent;
+    font: inherit; font-size: .875rem; padding: .4rem .9rem; border-radius: 6px;
+    cursor: pointer; transition: all .15s ease; border: 1px solid transparent;
+    background: transparent; color: var(--text-dim);
   }
+  button:hover { color: var(--text); }
+  button.ghost { border-color: var(--line); }
+  button.ghost:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: #1a1206; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); color: #1a1206; }
+  button:disabled { opacity: .5; cursor: default; filter: none; }
 
-  button.ghost {
-    background: transparent;
-    border-color: var(--line);
-    color: var(--text-dim);
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: .35rem .8rem; font-size: .8125rem; color: var(--muted); }
+  .seg button.active { background: var(--bg-soft); color: var(--accent); font-weight: 600; }
+
+  /* ================= 主体 ================= */
+  .body { flex: 1 1 auto; display: grid; grid-template-columns: 14.5rem minmax(0, 1fr); min-height: 0; }
+
+  /* ---- 侧栏 ---- */
+  .side { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--bg-soft); }
+  .side-head {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    padding: .75rem .9rem .5rem; font-size: .6875rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted);
   }
-
-  button.ghost:hover {
-    border-color: var(--muted);
-    color: var(--text);
+  .post-items { flex: 1 1 auto; overflow-y: auto; list-style: none; margin: 0; padding: 0 .4rem .5rem; }
+  .post-items li {
+    position: relative; padding: .5rem .55rem; border-radius: 6px; cursor: pointer;
+    display: flex; flex-direction: column; gap: .15rem; transition: background .15s ease;
   }
-
-  button.primary {
-    background: var(--accent);
-    color: #1a1206;
-    font-weight: 600;
+  .post-items li:hover { background: var(--bg); }
+  .post-items li.active { background: var(--bg); box-shadow: inset 2px 0 0 var(--accent); }
+  .post-items .pi-title {
+    font-size: .8125rem; color: var(--text-dim); line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; padding-right: 1.4rem;
   }
-
-  button.primary:hover { filter: brightness(1.08); }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: default;
-    filter: none;
+  .post-items li.active .pi-title { color: var(--text); }
+  .post-items .pi-meta {
+    font-family: var(--mono); font-size: .625rem; color: var(--muted);
+    letter-spacing: .04em; display: flex; gap: .4rem;
   }
-
-  /* ---------------- 分栏 ---------------- */
-  .layout {
-    flex: 1 1 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    min-height: 0;
+  .post-items .pi-del {
+    position: absolute; right: .3rem; top: .45rem; width: 1.35rem; height: 1.35rem;
+    padding: 0; display: none; align-items: center; justify-content: center;
+    border-radius: 4px; font-size: .75rem; color: var(--muted); line-height: 1;
   }
+  .post-items li:hover .pi-del { display: flex; }
+  .post-items .pi-del:hover { color: #ff8f8f; background: rgba(255,90,90,.12); }
+  .side-foot { flex: 0 0 auto; padding: .5rem .4rem .75rem; border-top: 1px solid var(--line-soft); }
+  .side-foot button { width: 100%; border: 1px dashed var(--line); font-size: .8125rem; }
+  .side-empty { padding: 1rem .9rem; font-size: .75rem; color: var(--muted); }
 
-  .pane {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+  /* ---- 右侧 ---- */
+  .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
+
+  .fields { flex: 0 0 auto; padding: .9rem 1.5rem .6rem; display: grid; gap: .55rem; }
+  input[type="text"], input[type="date"], select {
+    font: inherit; background: transparent; border: none; border-bottom: 1px solid var(--line);
+    color: var(--text); padding: .35rem 0; outline: none; width: 100%;
+    transition: border-color .15s ease;
   }
-
-  .pane.edit {
-    border-right: 1px solid var(--line);
-    background: var(--bg);
-  }
-
-  .pane.preview { background: var(--bg); }
-
-  .pane-head {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 1.25rem;
-    font-size: 0.6875rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted);
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .pane-head .count {
-    font-family: var(--mono);
-    letter-spacing: 0.04em;
-    text-transform: none;
-  }
-
-  /* ---------------- 编辑区 ---------------- */
-  .fields {
-    flex: 0 0 auto;
-    padding: 1rem 1.25rem 0.75rem;
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  input[type="text"],
-  input[type="date"] {
-    font: inherit;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--line);
-    color: var(--text);
-    padding: 0.4rem 0;
-    outline: none;
-    transition: border-color 0.16s ease;
-    width: 100%;
-  }
-
-  input[type="text"]:focus,
-  input[type="date"]:focus { border-bottom-color: var(--accent); }
-
-  input::placeholder { color: var(--muted); opacity: 0.7; }
-
+  input[type="text"]:focus, input[type="date"]:focus, select:focus { border-bottom-color: var(--accent); }
+  input::placeholder { color: var(--muted); opacity: .7; }
   #title {
-    font-family: var(--serif);
-    font-size: 1.5rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    border-bottom: none;
-    padding: 0.25rem 0;
+    font-family: var(--serif); font-size: 1.45rem; font-weight: 600;
+    letter-spacing: -.01em; border-bottom: none; padding: .15rem 0;
+  }
+  .meta-row { display: grid; grid-template-columns: 9.5rem 11rem minmax(0, 1fr); gap: 1rem; }
+  .meta-row label, .field-label {
+    display: block; font-size: .625rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: .1rem;
+  }
+  input[type="date"] { font-family: var(--mono); font-size: .8125rem; color-scheme: dark; }
+  select { font-size: .875rem; color-scheme: dark; }
+  select option { background: var(--bg-soft); color: var(--text); }
+
+  /* ---- 工具栏 ---- */
+  .toolbar {
+    flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem;
+    padding: .4rem 1.5rem .5rem; border-bottom: 1px solid var(--line-soft);
+  }
+  .toolbar .tb {
+    min-width: 1.9rem; height: 1.9rem; padding: 0 .4rem; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .8125rem; color: var(--text-dim); border: 1px solid transparent;
+  }
+  .toolbar .tb:hover { background: var(--bg-soft); color: var(--text); }
+  .toolbar .tb.on { background: var(--bg-soft); color: var(--accent); border-color: var(--line); }
+  .toolbar .sep { width: 1px; height: 1.25rem; background: var(--line); margin: 0 .35rem; }
+  .toolbar select {
+    border: 1px solid var(--line); border-radius: 5px; padding: .22rem .35rem;
+    width: auto; font-size: .8125rem; background: var(--bg); color: var(--text-dim);
   }
 
-  .meta-row {
-    display: grid;
-    grid-template-columns: 11rem minmax(0, 1fr);
-    gap: 1rem;
+  .color-btn {
+    position: relative; width: 1.9rem; height: 1.9rem; border-radius: 5px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .8125rem; color: var(--text-dim); overflow: hidden;
+  }
+  .color-btn:hover { background: var(--bg-soft); color: var(--text); }
+  .color-btn input[type="color"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; border: none; }
+  .color-btn .swatch {
+    position: absolute; bottom: .22rem; left: 50%; transform: translateX(-50%);
+    width: 1rem; height: .18rem; border-radius: 1px;
   }
 
-  .meta-row label {
-    display: block;
-    font-size: 0.6875rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 0.15rem;
+  /* ---- 编辑区 ---- */
+  .editor-area { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; }
+  #richWrap { flex: 1 1 auto; overflow-y: auto; padding: 1.25rem 1.5rem 4rem; }
+  #richEditor {
+    max-width: 44rem; margin: 0 auto; min-height: 60vh; outline: none;
+    font-size: 1.0625rem; line-height: 1.8;
+  }
+  #richEditor:empty::before {
+    content: attr(data-ph); color: var(--muted); opacity: .6; pointer-events: none;
+    font-family: var(--sans); font-size: .9375rem;
   }
 
-  input[type="date"] {
-    font-family: var(--mono);
-    font-size: 0.875rem;
-    color-scheme: dark;
+  #mdWrap { flex: 1 1 auto; display: none; min-height: 0; }
+  #mdWrap.show { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  #mdEditor {
+    min-height: 0; width: 100%; resize: none; border: none; outline: none;
+    background: var(--bg); color: var(--text-dim); font-family: var(--sans);
+    font-size: 1rem; line-height: 1.8; padding: 1.25rem 1.5rem 4rem; tab-size: 2;
+    border-right: 1px solid var(--line-soft);
   }
+  #mdPreview { overflow-y: auto; padding: 1.25rem 1.75rem 4rem; }
+  #mdPreview .prose { max-width: 44rem; margin: 0 auto; }
 
-  #body {
-    flex: 1 1 auto;
-    min-height: 0;
-    width: 100%;
-    resize: none;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--text-dim);
-    font-family: var(--sans);
-    font-size: 1rem;
-    line-height: 1.8;
-    padding: 0.75rem 1.25rem 2rem;
-    tab-size: 2;
+  /* 编辑区内元素 */
+  #richEditor table, #mdPreview table, .prose table { border-collapse: collapse; width: 100%; margin: 1.5em 0; font-size: .9375rem; }
+  #richEditor th, #richEditor td, #mdPreview th, #mdPreview td, .prose th, .prose td {
+    border: 1px solid var(--line); padding: .5rem .7rem; text-align: left;
   }
+  #richEditor th, #mdPreview th, .prose th { background: var(--bg-soft); font-weight: 600; color: var(--text); }
 
-  #body::placeholder { color: var(--muted); opacity: 0.65; }
-
-  /* ---------------- 预览区 ---------------- */
-  .preview-scroll {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding: 2rem 2.5rem 4rem;
+  .attach {
+    display: inline-flex; align-items: center; gap: .5rem; max-width: 100%;
+    padding: .55rem .8rem; margin: .25rem 0; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg-soft); text-decoration: none !important;
+    color: var(--text-dim) !important; font-size: .875rem; line-height: 1.4;
   }
+  .attach:hover { border-color: var(--accent); color: var(--text) !important; }
+  .attach .size { font-family: var(--mono); font-size: .6875rem; color: var(--muted); }
 
-  .preview-scroll .prose {
-    max-width: 42rem;
-    margin: 0 auto;
-  }
-
-  .preview-scroll h1.preview-title {
-    font-family: var(--serif);
-    font-size: clamp(1.875rem, 3vw, 2.375rem);
-    line-height: 1.25;
-    letter-spacing: -0.02em;
-    margin: 0 0 0.75rem;
-    font-weight: 600;
-    max-width: 42rem;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .preview-meta {
-    max-width: 42rem;
-    margin: 0 auto 2.5rem;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-  }
-
-  .empty-hint {
-    color: var(--muted);
-    font-size: 0.9375rem;
-    text-align: center;
-    padding-top: 4rem;
-  }
-
-  /* ---------------- 滚动条 ---------------- */
+  /* ---- 滚动条 ---- */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: var(--line);
-    border-radius: 6px;
-    border: 2px solid var(--bg);
-  }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 2px solid var(--bg); }
   ::-webkit-scrollbar-thumb:hover { background: var(--line-soft); }
 
-  /* ---------------- 窄屏 ---------------- */
-  @media (max-width: 60rem) {
-    .layout { grid-template-columns: minmax(0, 1fr); }
-    .pane.preview { display: none; }
-    .meta-row { grid-template-columns: 1fr; }
+  @media (max-width: 68rem) {
+    .body { grid-template-columns: minmax(0, 1fr); }
+    .side { display: none; }
+    .meta-row { grid-template-columns: 1fr 1fr; }
+    .status { display: none; }
   }
 </style>
 </head>
@@ -280,107 +200,145 @@
     <div class="brand">xiray<span>写作台</span></div>
     <div class="actions">
       <span class="status" id="status">就绪</span>
+      <div class="seg">
+        <button id="modeRich" class="active">富文本</button>
+        <button id="modeMd">Markdown</button>
+      </div>
       <button class="ghost" id="newBtn">新建</button>
       <button class="primary" id="pubBtn">发布</button>
     </div>
   </header>
 
-  <main class="layout">
+  <div class="body">
 
-    <section class="pane edit">
-      <div class="pane-head">
-        <span>Markdown</span>
-        <span class="count" id="counter">0 字 · 约 1 分钟</span>
-      </div>
+    <aside class="side">
+      <div class="side-head"><span>文章</span><span id="postCount"></span></div>
+      <ul class="post-items" id="postItems"></ul>
+      <div class="side-foot"><button id="newBtn2">＋ 新建文章</button></div>
+    </aside>
+
+    <section class="main">
 
       <div class="fields">
         <input type="text" id="title" placeholder="标题" autocomplete="off">
         <div class="meta-row">
-          <div>
-            <label for="date">日期</label>
-            <input type="date" id="date">
-          </div>
-          <div>
-            <label for="slug">短名（网址用）</label>
-            <input type="text" id="slug" placeholder="my-post-name" autocomplete="off" spellcheck="false">
-          </div>
+          <div><label for="date">日期</label><input type="date" id="date"></div>
+          <div><label for="category">类别</label><select id="category"></select></div>
+          <div><label for="slug">短名（网址用）</label>
+            <input type="text" id="slug" placeholder="my-post-name" autocomplete="off" spellcheck="false"></div>
         </div>
         <div>
-          <label for="excerpt" style="display:block;font-size:.6875rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.15rem;">摘要</label>
+          <label class="field-label" for="excerpt">摘要</label>
           <input type="text" id="excerpt" placeholder="显示在首页列表里的一句话" autocomplete="off">
         </div>
       </div>
 
-      <textarea id="body" spellcheck="false" placeholder="在这里写正文。
+      <div class="toolbar" id="toolbar">
+        <button class="tb" data-cmd="bold" title="粗体 Ctrl+B"><b>B</b></button>
+        <button class="tb" data-cmd="italic" title="斜体 Ctrl+I"><i>I</i></button>
+        <button class="tb" data-cmd="underline" title="下划线 Ctrl+U"><u>U</u></button>
+        <button class="tb" data-cmd="strikeThrough" title="删除线"><s>S</s></button>
+        <span class="sep"></span>
 
-支持 Markdown：
+        <select id="blockFmt" title="段落格式">
+          <option value="p">正文</option>
+          <option value="h2">标题</option>
+          <option value="h3">小标题</option>
+          <option value="h4">更小标题</option>
+          <option value="blockquote">引用</option>
+          <option value="pre">代码块</option>
+        </select>
+
+        <span class="sep"></span>
+
+        <label class="color-btn" title="文字颜色">
+          <span>A</span><span class="swatch" id="fgSwatch" style="background:#e7eaee"></span>
+          <input type="color" id="fgColor" value="#e7eaee">
+        </label>
+        <label class="color-btn" title="背景色">
+          <span style="background:var(--accent);color:#1a1206;padding:0 .18rem;border-radius:2px;font-size:.7rem">A</span>
+          <input type="color" id="bgColor" value="#ffb86b">
+        </label>
+        <button class="tb" data-cmd="removeFormat" title="清除格式">⌫</button>
+
+        <span class="sep"></span>
+
+        <button class="tb" data-act="link" title="链接">🔗</button>
+        <button class="tb" data-act="table" title="插入表格">▦</button>
+        <button class="tb" data-act="attach" title="插入附件">📎</button>
+        <button class="tb" data-act="image" title="插入图片">🖼</button>
+        <button class="tb" data-cmd="insertUnorderedList" title="无序列表">•</button>
+        <button class="tb" data-cmd="insertOrderedList" title="有序列表">1.</button>
+        <button class="tb" data-act="hr" title="分割线">—</button>
+        <span class="sep"></span>
+        <button class="tb" data-act="code" title="行内代码">&lt;/&gt;</button>
+      </div>
+
+      <div class="editor-area">
+        <div id="richWrap">
+          <div id="richEditor" class="prose" contenteditable="true"
+               data-ph="在这里写正文。选中文字后用上面的工具栏改格式。"></div>
+        </div>
+        <div id="mdWrap">
+          <textarea id="mdEditor" spellcheck="false" placeholder="Markdown 写法：
 
 ## 小标题
 **粗体**  *斜体*  `行内代码`
 
-- 列表项
-- 列表项
-
+- 列表
 > 引用
 
-```代码块```"></textarea>
-    </section>
-
-    <section class="pane preview">
-      <div class="pane-head">
-        <span>预览</span>
-        <span class="count" id="liveTag">实时</span>
-      </div>
-      <div class="preview-scroll" id="previewScroll">
-        <div id="emptyHint" class="empty-hint">左边写，这里实时看到效果</div>
-        <div id="previewWrap" style="display:none">
-          <h1 class="preview-title" id="pvTitle"></h1>
-          <p class="preview-meta" id="pvMeta"></p>
-          <article class="prose" id="pvBody"></article>
+| 列 | 列 |
+| --- | --- |
+| 值 | 值 |"></textarea>
+          <div id="mdPreview"><div class="prose"></div></div>
         </div>
       </div>
-    </section>
 
-  </main>
+    </section>
+  </div>
 </div>
+
+<input type="file" id="filePicker" style="display:none">
+<input type="file" id="imagePicker" accept="image/*" style="display:none">
 
 <script>
 (function () {
   "use strict";
-
   var $ = function (id) { return document.getElementById(id); };
 
   var el = {
-    title: $("title"), date: $("date"), slug: $("slug"),
-    excerpt: $("excerpt"), body: $("body"),
-    status: $("status"), counter: $("counter"),
-    pubBtn: $("pubBtn"), newBtn: $("newBtn"),
-    pvTitle: $("pvTitle"), pvMeta: $("pvMeta"), pvBody: $("pvBody"),
-    previewWrap: $("previewWrap"), emptyHint: $("emptyHint"),
-    previewScroll: $("previewScroll")
+    title: $("title"), date: $("date"), category: $("category"), slug: $("slug"),
+    excerpt: $("excerpt"), status: $("status"), rich: $("richEditor"),
+    md: $("mdEditor"), mdWrap: $("mdWrap"), mdPreview: $("mdPreview").firstChild,
+    richWrap: $("richWrap"), toolbar: $("toolbar"), blockFmt: $("blockFmt"),
+    postItems: $("postItems"), postCount: $("postCount"),
+    pubBtn: $("pubBtn"), newBtn: $("newBtn"), newBtn2: $("newBtn2"),
+    modeRich: $("modeRich"), modeMd: $("modeMd"),
+    fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
+    filePicker: $("filePicker"), imagePicker: $("imagePicker")
   };
 
-  var STORE = "xiray-writer-draft";
+  var STORE = "xiray-writer-v2";
+  var mode = "rich";
+  var currentSlug = "";
   var slugTouched = false;
+  var mdTimer = null;
 
-  /* ---------------- Markdown ---------------- */
+  /* ============================================ Markdown → HTML */
 
   function esc(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   function inline(raw) {
-    var s = esc(raw);
-    var codes = [];
+    var s = esc(raw), codes = [];
     s = s.replace(/`([^`]+)`/g, function (m, c) {
-      codes.push(c);
-      return "\u0000" + (codes.length - 1) + "\u0000";
+      codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000";
     });
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+    s = s.replace(/~~([^~]+)~~/g, "<s>$1</s>");
     s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1">');
     s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener">$1</a>');
@@ -390,94 +348,114 @@
     return s;
   }
 
+  var HTML_BLOCK_TAGS = ["span", "a", "u", "div", "figure", "table", "img",
+                         "sup", "sub", "mark", "iframe", "video", "audio", "p"];
+
+  function collectHtml(lines, i) {
+    var m = lines[i].trim().match(/^<([a-zA-Z][\w-]*)/);
+    if (!m) return null;
+    var tag = m[1].toLowerCase();
+    if (HTML_BLOCK_TAGS.indexOf(tag) < 0) return null;
+    if (/\/>\s*$/.test(lines[i])) return { html: lines[i], next: i + 1 };
+
+    var open = new RegExp("<" + tag + "\\b", "gi");
+    var close = new RegExp("</" + tag + ">", "gi");
+    var depth = 0, buf = [];
+    for (var j = i; j < lines.length; j++) {
+      buf.push(lines[j]);
+      depth += (lines[j].match(open) || []).length;
+      depth -= (lines[j].match(close) || []).length;
+      if (depth <= 0) return { html: buf.join("\n"), next: j + 1 };
+    }
+    return { html: buf.join("\n"), next: lines.length };
+  }
+
+  function splitRow(line) {
+    return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|")
+      .map(function (c) { return c.trim(); });
+  }
+
   function mdToHtml(src) {
     var lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
-    var out = [];
-    var para = [];
-    var i = 0;
+    var out = [], para = [], i = 0;
 
     function flush() {
-      if (para.length) {
-        out.push("<p>" + inline(para.join(" ")) + "</p>");
-        para = [];
-      }
+      if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; }
     }
 
     while (i < lines.length) {
       var line = lines[i];
 
-      // 代码块
       if (/^```/.test(line.trim())) {
         flush();
-        var buf = [];
-        i++;
-        while (i < lines.length && !/^```/.test(lines[i].trim())) {
-          buf.push(lines[i]);
-          i++;
-        }
+        var buf = []; i++;
+        while (i < lines.length && !/^```/.test(lines[i].trim())) { buf.push(lines[i]); i++; }
         i++;
         out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>");
         continue;
       }
 
-      // 空行
       if (!line.trim()) { flush(); i++; continue; }
 
-      // 标题
+      if (/^\s*</.test(line)) {
+        var blk = collectHtml(lines, i);
+        if (blk) { flush(); out.push(blk.html); i = blk.next; continue; }
+      }
+
+      if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length &&
+          /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+        flush();
+        var head = splitRow(line), rows = [];
+        i += 2;
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
+          rows.push(splitRow(lines[i])); i++;
+        }
+        out.push("<table><thead><tr>" +
+          head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") +
+          "</tr></thead><tbody>" +
+          rows.map(function (r) {
+            return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>";
+          }).join("") + "</tbody></table>");
+        continue;
+      }
+
       var h = line.match(/^(#{1,4})\s+(.*)$/);
       if (h) {
         flush();
         var lvl = Math.min(h[1].length + 1, 4);
         out.push("<h" + lvl + ">" + inline(h[2]) + "</h" + lvl + ">");
-        i++;
-        continue;
+        i++; continue;
       }
 
-      // 分割线
-      if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) {
-        flush();
-        out.push("<hr>");
-        i++;
-        continue;
-      }
+      if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); out.push("<hr>"); i++; continue; }
 
-      // 引用
       if (/^>\s?/.test(line)) {
         flush();
         var q = [];
         while (i < lines.length && /^>\s?/.test(lines[i])) {
-          q.push(lines[i].replace(/^>\s?/, ""));
-          i++;
+          q.push(lines[i].replace(/^>\s?/, "")); i++;
         }
         out.push("<blockquote><p>" + inline(q.join(" ")) + "</p></blockquote>");
         continue;
       }
 
-      // 无序列表
       if (/^\s*[-*+]\s+/.test(line)) {
         flush();
         var ul = [];
         while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
-          ul.push(lines[i].replace(/^\s*[-*+]\s+/, ""));
-          i++;
+          ul.push(lines[i].replace(/^\s*[-*+]\s+/, "")); i++;
         }
-        out.push("<ul>" + ul.map(function (t) {
-          return "<li>" + inline(t) + "</li>";
-        }).join("") + "</ul>");
+        out.push("<ul>" + ul.map(function (t) { return "<li>" + inline(t) + "</li>"; }).join("") + "</ul>");
         continue;
       }
 
-      // 有序列表
       if (/^\s*\d+\.\s+/.test(line)) {
         flush();
         var ol = [];
         while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-          ol.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
-          i++;
+          ol.push(lines[i].replace(/^\s*\d+\.\s+/, "")); i++;
         }
-        out.push("<ol>" + ol.map(function (t) {
-          return "<li>" + inline(t) + "</li>";
-        }).join("") + "</ol>");
+        out.push("<ol>" + ol.map(function (t) { return "<li>" + inline(t) + "</li>"; }).join("") + "</ol>");
         continue;
       }
 
@@ -488,143 +466,659 @@
     return out.join("\n");
   }
 
-  /* ---------------- 工具 ---------------- */
+  /* ============================================ HTML → Markdown */
+
+  function keepStyle(style) {
+    var keep = [];
+    String(style || "").split(";").forEach(function (part) {
+      var kv = part.split(":");
+      if (kv.length < 2) return;
+      var k = kv[0].trim().toLowerCase();
+      var v = kv.slice(1).join(":").trim();
+      if (!v) return;
+      if (k === "color" || k === "background-color" || k === "background") {
+        keep.push(k + ": " + v);
+      }
+    });
+    return keep.join("; ");
+  }
+
+  function nodeToMd(node, inPre) {
+    if (node.nodeType === 3) return node.nodeValue.replace(/\u00a0/g, " ");
+    if (node.nodeType !== 1) return "";
+
+    var tag = node.nodeName.toLowerCase();
+    function inner(n) {
+      return Array.prototype.map.call(n.childNodes, function (c) {
+        return nodeToMd(c, inPre);
+      }).join("");
+    }
+
+    switch (tag) {
+      case "br": return "\n";
+      case "strong": case "b": {
+        var t = inner(node); return t.trim() ? "**" + t + "**" : t;
+      }
+      case "em": case "i": {
+        var t2 = inner(node); return t2.trim() ? "*" + t2 + "*" : t2;
+      }
+      case "s": case "del": case "strike": {
+        var t3 = inner(node); return t3.trim() ? "~~" + t3 + "~~" : t3;
+      }
+      case "u": return "<u>" + inner(node) + "</u>";
+      case "code":
+        if (inPre) return node.textContent;
+        return "`" + node.textContent + "`";
+      case "pre": {
+        var codeEl = node.querySelector("code");
+        var raw = (codeEl ? codeEl.textContent : node.textContent).replace(/\n+$/, "");
+        return "\n```\n" + raw + "\n```\n\n";
+      }
+      case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
+        var lvl = Number(tag[1]);
+        return "\n" + Array(lvl + 1).join("#") + " " + inner(node).trim() + "\n\n";
+      }
+      case "p": return inner(node).trim() + "\n\n";
+      case "blockquote": {
+        var body = inner(node).trim().replace(/\n{3,}/g, "\n\n");
+        return "\n" + body.split("\n").map(function (l) {
+          return l.trim() ? "> " + l.trim() : ">";
+        }).join("\n") + "\n\n";
+      }
+      case "ul": case "ol": {
+        var ordered = tag === "ol", idx = 1, lines = [];
+        Array.prototype.forEach.call(node.children, function (li) {
+          if (li.nodeName.toLowerCase() !== "li") return;
+          var text = inner(li).trim().replace(/\n+/g, " ");
+          lines.push((ordered ? (idx++) + ". " : "- ") + text);
+        });
+        return "\n" + lines.join("\n") + "\n\n";
+      }
+      case "li": return inner(node);
+      case "a": {
+        var cls = node.getAttribute("class") || "";
+        if (cls.indexOf("attach") >= 0) return "\n" + node.outerHTML + "\n\n";
+        var href = node.getAttribute("href") || "";
+        var txt = inner(node).trim() || href;
+        return "[" + txt + "](" + href + ")";
+      }
+      case "img":
+        return "![" + (node.getAttribute("alt") || "") + "](" + (node.getAttribute("src") || "") + ")";
+      case "hr": return "\n---\n\n";
+      case "table": {
+        var rows = Array.prototype.slice.call(node.querySelectorAll("tr"));
+        if (!rows.length) return "";
+        var cells = rows.map(function (tr) {
+          return Array.prototype.map.call(tr.children, function (td) {
+            return inner(td).trim().replace(/\n+/g, " ").replace(/\|/g, "\\|");
+          });
+        });
+        var width = Math.max.apply(null, cells.map(function (r) { return r.length; }));
+        var res = [];
+        cells.forEach(function (r, ri) {
+          res.push("| " + r.join(" | ") + " |");
+          if (ri === 0) res.push("| " + Array(width).fill("---").join(" | ") + " |");
+        });
+        return "\n" + res.join("\n") + "\n\n";
+      }
+      case "span": {
+        var st = keepStyle(node.getAttribute("style"));
+        var content = inner(node);
+        if (st && content.trim()) return '<span style="' + st + '">' + content + "</span>";
+        return content;
+      }
+      case "div": {
+        var st2 = keepStyle(node.getAttribute("style"));
+        var c2 = inner(node).trim();
+        if (st2 && c2) return '<div style="' + st2 + '">' + c2 + "</div>\n\n";
+        return c2 + "\n\n";
+      }
+      case "figure": return "\n" + node.outerHTML + "\n\n";
+      case "script": case "style": return "";
+      default: return inner(node);
+    }
+  }
+
+  function htmlToMd(html) {
+    var box = document.createElement("div");
+    box.innerHTML = html || "";
+    return nodeToMd(box, false)
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+  }
+
+  /* ============================================ 净化 */
+
+  var ALLOWED = {
+    P: 1, BR: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, DEL: 1, STRIKE: 1,
+    H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, LI: 1,
+    BLOCKQUOTE: 1, PRE: 1, CODE: 1, A: 1, IMG: 1, HR: 1,
+    TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1,
+    SPAN: 1, DIV: 1, FIGURE: 1, FIGCAPTION: 1, SUP: 1, SUB: 1, MARK: 1
+  };
+  var KEEP_ATTR = { href: 1, src: 1, alt: 1, "class": 1, download: 1, colspan: 1, rowspan: 1 };
+
+  function sanitize(root) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
+    var kill = [];
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      if (!ALLOWED[n.nodeName.toUpperCase()]) { kill.push(n); continue; }
+      Array.prototype.slice.call(n.attributes).forEach(function (attr) {
+        var name = attr.name.toLowerCase();
+        if (KEEP_ATTR[name]) return;
+        if (name === "style") {
+          var st = keepStyle(attr.value);
+          if (st) n.setAttribute("style", st); else n.removeAttribute("style");
+          return;
+        }
+        n.removeAttribute(attr.name);
+      });
+      if (n.nodeName.toUpperCase() === "A") {
+        n.setAttribute("target", "_blank");
+        n.setAttribute("rel", "noopener");
+      }
+    }
+    kill.forEach(function (n) {
+      while (n.firstChild) n.parentNode.insertBefore(n.firstChild, n);
+      if (n.parentNode) n.parentNode.removeChild(n);
+    });
+    return root;
+  }
+
+  /* ============================================ 模式切换 */
+
+  function setMode(next) {
+    if (next === mode) return;
+
+    if (next === "md") {
+      el.md.value = htmlToMd(el.rich.innerHTML);
+      renderMdPreview();
+    } else {
+      el.rich.innerHTML = mdToHtml(el.md.value) || "";
+    }
+
+    mode = next;
+    el.modeRich.classList.toggle("active", mode === "rich");
+    el.modeMd.classList.toggle("active", mode === "md");
+    el.richWrap.style.display = mode === "rich" ? "block" : "none";
+    el.mdWrap.classList.toggle("show", mode === "md");
+    updateToolbarState();
+    saveDraft();
+    setStatus(mode === "rich" ? "富文本模式" : "Markdown 模式");
+  }
+
+  function renderMdPreview() {
+    el.mdPreview.innerHTML = mdToHtml(el.md.value);
+  }
+
+  /* ============================================ 工具栏 */
+
+  function exec(cmd, value) {
+    el.rich.focus();
+    try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
+    document.execCommand(cmd, false, value || null);
+    updateToolbarState();
+  }
+
+  function insertHtml(html) {
+    el.rich.focus();
+    document.execCommand("insertHTML", false, html);
+  }
+
+  function updateToolbarState() {
+    if (mode !== "rich") return;
+    ["bold", "italic", "underline", "strikeThrough",
+     "insertUnorderedList", "insertOrderedList"].forEach(function (cmd) {
+      var btn = el.toolbar.querySelector('[data-cmd="' + cmd + '"]');
+      if (!btn) return;
+      var on = false;
+      try { on = document.queryCommandState(cmd); } catch (e) {}
+      btn.classList.toggle("on", on);
+    });
+  }
+
+  el.toolbar.addEventListener("mousedown", function (e) {
+    if (e.target.closest(".tb") || e.target.closest("select") || e.target.closest(".color-btn")) {
+      e.preventDefault();
+    }
+  });
+
+  el.toolbar.addEventListener("click", function (e) {
+    var btn = e.target.closest(".tb");
+    if (!btn) return;
+
+    if (mode === "md") { mdToolbar(btn); return; }
+
+    var cmd = btn.getAttribute("data-cmd");
+    var act = btn.getAttribute("data-act");
+
+    if (cmd) { exec(cmd); return; }
+
+    if (act === "link") {
+      var sel = String(window.getSelection() || "");
+      var url = prompt("链接地址", "https://");
+      if (!url) return;
+      if (sel) exec("createLink", url);
+      else insertHtml('<a href="' + url + '" target="_blank" rel="noopener">' + esc(url) + "</a>");
+      return;
+    }
+    if (act === "table") {
+      insertHtml('<table><thead><tr><th>列一</th><th>列二</th><th>列三</th></tr></thead><tbody>' +
+        "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>" +
+        "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>" +
+        "</tbody></table><p><br></p>");
+      return;
+    }
+    if (act === "hr") { insertHtml("<hr><p><br></p>"); return; }
+    if (act === "code") {
+      var s = String(window.getSelection() || "");
+      insertHtml("<code>" + esc(s || "代码") + "</code>");
+      return;
+    }
+    if (act === "attach") { el.filePicker.click(); return; }
+    if (act === "image") { el.imagePicker.click(); return; }
+  });
+
+  el.blockFmt.addEventListener("change", function () {
+    var v = el.blockFmt.value;
+    if (mode === "md") {
+      var prefix = { p: "", h2: "## ", h3: "### ", h4: "#### ", blockquote: "> ", pre: "```\n\n```" }[v] || "";
+      insertAtCursor(el.md, prefix);
+      renderMdPreview();
+      return;
+    }
+    if (v === "pre") insertHtml("<pre><code>代码</code></pre><p><br></p>");
+    else exec("formatBlock", v);
+    el.blockFmt.value = "p";
+  });
+
+  el.fgColor.addEventListener("input", function () {
+    el.fgSwatch.style.background = el.fgColor.value;
+    if (mode === "rich") exec("foreColor", el.fgColor.value);
+  });
+  el.bgColor.addEventListener("input", function () {
+    if (mode === "rich") exec("hiliteColor", el.bgColor.value);
+  });
+
+  /* ---- Markdown 模式工具栏 ---- */
+
+  function insertAtCursor(ta, text) {
+    var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    ta.value = v.slice(0, s) + text + v.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + text.length;
+    ta.focus();
+  }
+
+  function wrapSelection(ta, before, after) {
+    var s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+    var sel = v.slice(s, e) || "文字";
+    ta.value = v.slice(0, s) + before + sel + after + v.slice(e);
+    ta.selectionStart = s + before.length;
+    ta.selectionEnd = s + before.length + sel.length;
+    ta.focus();
+  }
+
+  function mdToolbar(btn) {
+    var cmd = btn.getAttribute("data-cmd");
+    var act = btn.getAttribute("data-act");
+
+    if (cmd === "bold") return wrapSelection(el.md, "**", "**");
+    if (cmd === "italic") return wrapSelection(el.md, "*", "*");
+    if (cmd === "underline") return wrapSelection(el.md, "<u>", "</u>");
+    if (cmd === "strikeThrough") return wrapSelection(el.md, "~~", "~~");
+    if (cmd === "insertUnorderedList") return insertAtCursor(el.md, "\n- ");
+    if (cmd === "insertOrderedList") return insertAtCursor(el.md, "\n1. ");
+    if (cmd === "removeFormat") return;
+
+    if (act === "link") {
+      var url = prompt("链接地址", "https://");
+      if (!url) return;
+      return wrapSelection(el.md, "[", "](" + url + ")");
+    }
+    if (act === "code") {
+      if (el.md.selectionEnd > el.md.selectionStart) return wrapSelection(el.md, "`", "`");
+      return insertAtCursor(el.md, "`代码`");
+    }
+    if (act === "table") {
+      return insertAtCursor(el.md, "\n| 列一 | 列二 |\n| --- | --- |\n| 值 | 值 |\n");
+    }
+    if (act === "hr") return insertAtCursor(el.md, "\n\n---\n\n");
+    if (act === "attach") return el.filePicker.click();
+    if (act === "image") return el.imagePicker.click();
+  }
+
+  /* ============================================ 附件 / 图片 */
+
+  function uploadFile(file, asImage) {
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) { setStatus("文件超过 25MB", "err"); return; }
+    setStatus("正在上传 " + file.name + " …");
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      var b64 = String(reader.result).split(",")[1];
+      fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, data: b64 })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) { setStatus("上传失败：" + (res.error || ""), "err"); return; }
+          var f = res.file, html;
+          if (asImage || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name)) {
+            html = '<p><img src="' + f.url + '" alt="' + f.display + '"></p>';
+          } else {
+            html = '<p><a class="attach" href="' + f.url + '" download="' + f.display + '">' +
+              "📎 " + f.display + '<span class="size">' + f.size + "</span></a></p>";
+          }
+          if (mode === "md") {
+            insertAtCursor(el.md, "\n" + html + "\n");
+            renderMdPreview();
+          } else {
+            insertHtml(html);
+          }
+          setStatus("已插入 " + f.display, "ok");
+        })
+        .catch(function () { setStatus("上传出错", "err"); });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  el.filePicker.addEventListener("change", function () {
+    uploadFile(this.files[0], false); this.value = "";
+  });
+  el.imagePicker.addEventListener("change", function () {
+    uploadFile(this.files[0], true); this.value = "";
+  });
+
+  /* ============================================ 粘贴净化 */
+
+  el.rich.addEventListener("paste", function (e) {
+    var cd = e.clipboardData || window.clipboardData;
+    var html = cd.getData("text/html");
+    if (!html) return;
+    e.preventDefault();
+    var box = document.createElement("div");
+    box.innerHTML = html;
+    sanitize(box);
+    document.execCommand("insertHTML", false, box.innerHTML);
+  });
+
+  el.rich.addEventListener("keyup", updateToolbarState);
+  el.rich.addEventListener("mouseup", updateToolbarState);
+
+  /* ============================================ 工具函数 */
 
   function pad(n) { return n < 10 ? "0" + n : "" + n; }
-
   function todayStr() {
     var d = new Date();
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
-
-  function dots(dateStr) {
-    var p = String(dateStr || "").split("-");
-    if (p.length === 3) return p[0] + " · " + p[1] + " · " + p[2];
-    return dateStr || "";
-  }
-
   function autoSlug(title) {
-    var ascii = String(title || "").toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48);
+    var ascii = String(title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "").slice(0, 48);
     if (ascii.length >= 3) return ascii;
     var d = new Date();
     return "post-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
       "-" + pad(d.getHours()) + pad(d.getMinutes());
   }
-
-  function plainLength(s) {
-    return String(s || "")
-      .replace(/```[\s\S]*?```/g, "")
-      .replace(/[#>*_`\-\[\]()!]/g, "")
-      .replace(/\s+/g, "").length;
-  }
-
-  function minutesOf(s) {
-    var n = plainLength(s);
-    return Math.max(1, Math.round(n / 400));
-  }
-
-  /* ---------------- 渲染 ---------------- */
-
-  function render() {
-    var text = el.body.value;
-    var html = mdToHtml(text);
-    var title = el.title.value.trim();
-
-    if (!text.trim() && !title) {
-      el.previewWrap.style.display = "none";
-      el.emptyHint.style.display = "block";
-    } else {
-      el.emptyHint.style.display = "none";
-      el.previewWrap.style.display = "block";
-      el.pvTitle.textContent = title || "（未填标题）";
-      el.pvMeta.textContent = dots(el.date.value) + "  ·  约 " + minutesOf(text) + " 分钟";
-      el.pvBody.innerHTML = html;
-    }
-
-    var n = plainLength(text);
-    el.counter.textContent = n + " 字 · 约 " + minutesOf(text) + " 分钟";
-  }
-
-  /* ---------------- 草稿 ---------------- */
-
-  function saveDraft() {
-    try {
-      localStorage.setItem(STORE, JSON.stringify({
-        title: el.title.value,
-        date: el.date.value,
-        slug: el.slug.value,
-        excerpt: el.excerpt.value,
-        body: el.body.value,
-        slugTouched: slugTouched
-      }));
-    } catch (e) { /* 忽略存储失败 */ }
-  }
-
-  function loadDraft() {
-    var raw;
-    try { raw = localStorage.getItem(STORE); } catch (e) { return; }
-    if (!raw) return;
-    try {
-      var d = JSON.parse(raw);
-      el.title.value = d.title || "";
-      el.date.value = d.date || todayStr();
-      el.slug.value = d.slug || "";
-      el.excerpt.value = d.excerpt || "";
-      el.body.value = d.body || "";
-      slugTouched = !!d.slugTouched;
-    } catch (e) { /* 坏数据就当没有 */ }
-  }
-
-  /* ---------------- 状态 ---------------- */
-
   function setStatus(msg, kind) {
     el.status.textContent = msg;
     el.status.className = "status" + (kind ? " " + kind : "");
   }
+  function minutesOf() {
+    var t = mode === "rich" ? el.rich.innerText : el.md.value;
+    var n = String(t || "").replace(/\s+/g, "").length;
+    return Math.max(1, Math.round(n / 400));
+  }
 
-  /* ---------------- 发布 ---------------- */
+  el.title.addEventListener("input", function () {
+    if (!slugTouched) el.slug.value = autoSlug(el.title.value);
+    saveDraft();
+  });
+  el.slug.addEventListener("input", function () {
+    slugTouched = true;
+    el.slug.value = el.slug.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    saveDraft();
+  });
+  [el.date, el.excerpt].forEach(function (n) { n.addEventListener("input", saveDraft); });
+  el.category.addEventListener("change", saveDraft);
+
+  el.md.addEventListener("input", function () {
+    if (mdTimer) clearTimeout(mdTimer);
+    mdTimer = setTimeout(function () { renderMdPreview(); saveDraft(); }, 180);
+  });
+  el.rich.addEventListener("input", function () {
+    if (mdTimer) clearTimeout(mdTimer);
+    mdTimer = setTimeout(saveDraft, 400);
+  });
+
+  /* ============================================ 类别 */
+
+  function loadCategories() {
+    return fetch("/api/categories").then(function (r) { return r.json(); })
+      .then(function (res) {
+        var cats = res.categories || [];
+        var cur = window.__pendingCat || null;
+        el.category.innerHTML = cats.map(function (c) {
+          return '<option value="' + esc(c) + '">' + esc(c) + "</option>";
+        }).join("") + '<option value="__new__">＋ 新建类别…</option>';
+        if (cur) { el.category.value = cur; window.__pendingCat = null; }
+        return cats;
+      });
+  }
+
+  el.category.addEventListener("change", function () {
+    if (el.category.value !== "__new__") return;
+    var name = prompt("新类别名称");
+    if (!name || !name.trim()) { el.category.selectedIndex = 0; return; }
+    fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", name: name.trim() })
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) { setStatus(res.error || "添加失败", "err"); return; }
+        window.__pendingCat = name.trim();
+        loadCategories().then(function () {
+          setStatus("已新增类别「" + name.trim() + "」", "ok");
+        });
+      });
+  });
+
+  /* ============================================ 历史文章 */
+
+  function loadPosts() {
+    fetch("/api/posts").then(function (r) { return r.json(); })
+      .then(function (res) {
+        var posts = res.posts || [];
+        el.postCount.textContent = posts.length ? String(posts.length) : "";
+        if (!posts.length) {
+          el.postItems.innerHTML = '<li class="side-empty">还没有文章</li>';
+          return;
+        }
+        el.postItems.innerHTML = posts.map(function (p) {
+          return '<li data-slug="' + esc(p.slug) + '"' +
+            (p.slug === currentSlug ? ' class="active"' : "") + ">" +
+            '<span class="pi-title">' + esc(p.title) + "</span>" +
+            '<span class="pi-meta"><span>' + esc(p.date) + "</span><span>" +
+            esc(p.category || "未分类") + "</span></span>" +
+            '<button class="pi-del" title="删除">✕</button></li>';
+        }).join("");
+      });
+  }
+
+  el.postItems.addEventListener("click", function (e) {
+    var del = e.target.closest(".pi-del");
+    var li = e.target.closest("li[data-slug]");
+    if (!li) return;
+    var slug = li.getAttribute("data-slug");
+
+    if (del) {
+      e.stopPropagation();
+      if (!confirm("确定删除这篇文章？网站和仓库都会删掉。")) return;
+      setStatus("正在删除…");
+      fetch("/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: slug })
+      }).then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) { setStatus("删除失败：" + (res.error || ""), "err"); return; }
+          if (currentSlug === slug) newPost();
+          setStatus("已删除（" + (res.via || "") + "）", "ok");
+          loadPosts();
+        });
+      return;
+    }
+    openPost(slug);
+  });
+
+  function openPost(slug) {
+    fetch("/api/post?slug=" + encodeURIComponent(slug))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) { setStatus("打开失败", "err"); return; }
+        var p = res.post;
+        currentSlug = p.slug;
+        el.title.value = p.title || "";
+        el.date.value = p.date || todayStr();
+        el.excerpt.value = p.excerpt || "";
+        el.slug.value = p.slug;
+        slugTouched = true;
+
+        if ((p.mode || "rich") === "md") {
+          el.md.value = p.source || "";
+          el.rich.innerHTML = mdToHtml(el.md.value);
+        } else {
+          el.rich.innerHTML = p.source || p.body_html || "";
+          el.md.value = htmlToMd(el.rich.innerHTML);
+        }
+        renderMdPreview();
+
+        if (p.category) { window.__pendingCat = p.category; loadCategories(); }
+        setStatus("正在编辑《" + p.title + "》");
+        loadPosts();
+      });
+  }
+
+  /* ============================================ 草稿 */
+
+  function currentBodyHtml() {
+    if (mode === "rich") {
+      var clone = el.rich.cloneNode(true);
+      sanitize(clone);
+      return clone.innerHTML;
+    }
+    return mdToHtml(el.md.value);
+  }
+
+  function currentSource() {
+    return mode === "rich" ? el.rich.innerHTML : el.md.value;
+  }
+
+  function saveDraft() {
+    try {
+      localStorage.setItem(STORE, JSON.stringify({
+        mode: mode, currentSlug: currentSlug,
+        title: el.title.value, date: el.date.value,
+        category: el.category.value, slug: el.slug.value,
+        excerpt: el.excerpt.value,
+        rich: el.rich.innerHTML, md: el.md.value, slugTouched: slugTouched
+      }));
+    } catch (e) {}
+  }
+
+  function loadDraft() {
+    var raw;
+    try { raw = localStorage.getItem(STORE); } catch (e) { return false; }
+    if (!raw) return false;
+    try {
+      var d = JSON.parse(raw);
+      if (!d.title && !d.rich && !d.md) return false;
+      el.title.value = d.title || "";
+      el.date.value = d.date || todayStr();
+      el.excerpt.value = d.excerpt || "";
+      el.slug.value = d.slug || "";
+      el.rich.innerHTML = d.rich || "";
+      el.md.value = d.md || "";
+      currentSlug = d.currentSlug || "";
+      slugTouched = !!d.slugTouched;
+      if (d.category) window.__pendingCat = d.category;
+      if (d.mode === "md") setMode("md");
+      renderMdPreview();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* ============================================ 新建 / 发布 */
+
+  function newPost() {
+    if (!currentSlug && (el.title.value.trim() || el.rich.textContent.trim() || el.md.value.trim())) {
+      if (!confirm("清空当前内容？")) return;
+    }
+    currentSlug = "";
+    el.title.value = "";
+    el.excerpt.value = "";
+    el.rich.innerHTML = "";
+    el.md.value = "";
+    el.date.value = todayStr();
+    el.slug.value = autoSlug("");
+    slugTouched = false;
+    renderMdPreview();
+    setMode("rich");
+    saveDraft();
+    loadPosts();
+    setStatus("新文章");
+    el.title.focus();
+  }
 
   function publish() {
     var title = el.title.value.trim();
     var slug = el.slug.value.trim();
-    var bodyText = el.body.value;
+    var body = currentBodyHtml();
 
     if (!title) { setStatus("标题还没填", "err"); el.title.focus(); return; }
-    if (!bodyText.trim()) { setStatus("正文是空的", "err"); el.body.focus(); return; }
+    if (!String(body).replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim()) {
+      setStatus("正文是空的", "err"); return;
+    }
     if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
       setStatus("短名只能用小写字母、数字和短横线", "err"); el.slug.focus(); return;
     }
 
+    var cat = el.category.value === "__new__" ? "" : el.category.value;
+
     var payload = {
-      title: title,
-      slug: slug,
-      date: el.date.value || todayStr(),
+      title: title, slug: slug, date: el.date.value || todayStr(),
+      category: cat,
       excerpt: el.excerpt.value.trim() || title,
-      body: mdToHtml(bodyText),
-      minutes: minutesOf(bodyText)
+      body_html: body,
+      source: currentSource(),
+      mode: mode,
+      minutes: minutesOf()
     };
 
     el.pubBtn.disabled = true;
-    setStatus("正在发布…", "");
+    setStatus("正在发布…");
 
     fetch("/api/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
-    })
-      .then(function (r) { return r.json(); })
+    }).then(function (r) { return r.json(); })
       .then(function (res) {
         el.pubBtn.disabled = false;
         if (res.ok) {
-          setStatus("已发布 · " + (res.via ? "经由 " + res.via : "直连") + " · 约 30 秒后生效", "ok");
-          el.status.title = res.url;
+          currentSlug = res.slug;
+          slugTouched = true;
+          setStatus((res.existed ? "已更新" : "已发布") + " · " +
+            (res.via || "直连") + " · 约 30 秒后生效", "ok");
           window.open(res.url, "_blank", "noopener");
-          slugTouched = false;
+          loadPosts();
         } else {
-          setStatus("失败（" + (res.stage || "?") + "）：" + (res.error || "未知错误"), "err");
+          setStatus("失败（" + (res.stage || "?") + "）：" + (res.error || ""), "err");
           console.error(res);
         }
       })
@@ -635,70 +1129,28 @@
       });
   }
 
-  /* ---------------- 新建 ---------------- */
-
-  function newPost() {
-    if (el.body.value.trim() || el.title.value.trim()) {
-      if (!confirm("当前内容会被清空（草稿已自动保存过版本），继续？")) return;
-    }
-    el.title.value = "";
-    el.body.value = "";
-    el.excerpt.value = "";
-    el.date.value = todayStr();
-    el.slug.value = autoSlug("");
-    slugTouched = false;
-    setStatus("新文章", "");
-    saveDraft();
-    render();
-    el.title.focus();
-  }
-
-  /* ---------------- 事件 ---------------- */
-
-  var timer = null;
-  function scheduleRender() {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(function () { render(); saveDraft(); }, 180);
-  }
-
-  el.title.addEventListener("input", function () {
-    if (!slugTouched) el.slug.value = autoSlug(el.title.value);
-    scheduleRender();
-  });
-
-  el.slug.addEventListener("input", function () {
-    slugTouched = true;
-    el.slug.value = el.slug.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
-    saveDraft();
-  });
-
-  [el.date, el.excerpt].forEach(function (n) {
-    n.addEventListener("input", scheduleRender);
-  });
-
-  el.body.addEventListener("input", scheduleRender);
-
   el.pubBtn.addEventListener("click", publish);
   el.newBtn.addEventListener("click", newPost);
+  el.newBtn2.addEventListener("click", newPost);
+  el.modeRich.addEventListener("click", function () { setMode("rich"); });
+  el.modeMd.addEventListener("click", function () { setMode("md"); });
 
   document.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      publish();
-    }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); publish(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      saveDraft();
-      setStatus("草稿已保存", "ok");
+      e.preventDefault(); saveDraft(); setStatus("草稿已保存", "ok");
     }
   });
 
-  /* ---------------- 启动 ---------------- */
+  /* ============================================ 启动 */
 
-  loadDraft();
+  loadCategories();
+  var had = loadDraft();
   if (!el.date.value) el.date.value = todayStr();
-  if (!el.slug.value) el.slug.value = autoSlug(el.title.value);
-  render();
+  if (!el.slug.value) el.slug.value = autoSlug("");
+  renderMdPreview();
+  loadPosts();
+  setStatus(had ? "已恢复上次未发布的内容" : "就绪");
 })();
 </script>
 

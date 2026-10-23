@@ -184,6 +184,113 @@ body {
   background: var(--line);
 }
 
+/* ---------------------------- 搜索与筛选 ---------------------------- */
+
+.search-bar {
+  margin: 0 0 0.5rem;
+  padding: 1rem 0 1.25rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 0;
+  font-size: 1.1rem;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-1px);
+}
+
+#searchInput {
+  width: 100%;
+  font: inherit;
+  font-size: 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.5rem 2rem 0.5rem 1.5rem;
+  outline: none;
+  transition: border-color 0.18s ease;
+  -webkit-appearance: none;
+}
+
+#searchInput::-webkit-search-cancel-button { display: none; }
+#searchInput::placeholder { color: var(--muted); opacity: 0.75; }
+#searchInput:focus { border-bottom-color: var(--accent); }
+
+.search-clear {
+  position: absolute;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
+}
+
+.search-clear:hover { color: var(--text); }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.filters select,
+.date-range input[type="date"] {
+  font: inherit;
+  font-size: 0.8125rem;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-dim);
+  padding: 0.3rem 0.5rem;
+  outline: none;
+  color-scheme: dark;
+}
+
+.filters select:focus,
+.date-range input[type="date"]:focus { border-color: var(--accent); }
+
+.filters select option { background: var(--bg-soft); color: var(--text); }
+
+.date-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.date-range .dash { color: var(--muted); font-size: 0.75rem; }
+
+.result-count {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  margin-left: auto;
+}
+
+.no-result {
+  padding: 2rem 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
 /* ---------------------------- 文章列表 ---------------------------- */
 
 .post-list {
@@ -192,8 +299,27 @@ body {
   padding: 0;
 }
 
+.post-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
 .post-list li + li {
   border-top: 1px solid var(--line-soft);
+}
+
+.post-list .post-cat {
+  flex: 0 0 auto;
+  margin-top: 2.1rem;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
 }
 
 .post-list a {
@@ -384,6 +510,75 @@ body {
   max-width: 100%;
   height: auto;
   border-radius: 8px;
+}
+
+/* 表格 */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.75em 0;
+  font-size: 0.9375rem;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  background: var(--bg-soft);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.prose tr:hover td {
+  background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+/* 附件卡片 */
+.prose .attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.55rem 0.85rem;
+  margin: 0.25rem 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+.prose .attach:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.prose .attach .size {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+/* 文章页类别小标签 */
+.cat-chip {
+  display: inline-block;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  vertical-align: 0.05em;
 }
 
 /* ---------------------------- 关于页 ---------------------------- */

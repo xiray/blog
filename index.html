@@ -30,43 +30,75 @@
     <p class="sub">大多数时候在 Windows 上折腾。喜欢能跑起来、点得开、看得见的东西。</p>
   </section>
 
-  <p class="section-label">最近的文章</p>
+  <div class="search-bar">
+    <div class="search-input-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="search" id="searchInput" placeholder="搜索标题、正文、类别…" autocomplete="off" spellcheck="false">
+      <button class="search-clear" id="searchClear" title="清空" hidden>✕</button>
+    </div>
+    <div class="filters">
+      <select id="catFilter"><option value="">全部类别</option></select>
+      <div class="date-range">
+        <input type="date" id="dateFrom" title="起始日期">
+        <span class="dash">→</span>
+        <input type="date" id="dateTo" title="结束日期">
+      </div>
+      <span class="result-count" id="resultCount"></span>
+    </div>
+  </div>
 
-  <ul class="post-list">
+  <p class="section-label">文章</p>
 
-    <li>
+  <ul class="post-list" id="postList">
+
+    <li data-slug="feature-test" data-date="2026-10-23" data-category="代码编写">
+      <a href="posts/feature-test.html">
+        <span class="date">2026 · 10 · 23</span>
+        <span class="title">功能测试文章（可删除）</span>
+        <span class="excerpt">临时测试富文本、表格、附件、类别。</span>
+      </a>
+      <span class="post-cat">代码编写</span>
+    </li>
+
+    <li data-slug="hello-github-pages" data-date="2026-10-22" data-category="折腾记录">
+      <a href="posts/hello-github-pages.html">
+        <span class="date">2026 · 10 · 22</span>
+        <span class="title">把博客搬上 GitHub Pages，顺便记一下踩的坑</span>
+        <span class="excerpt">一个不需要服务器、不需要构建、不花钱的静态站点方案。</span>
+      </a>
+      <span class="post-cat">折腾记录</span>
+    </li>
+
+    <li data-slug="writer-tool" data-date="2026-10-22" data-category="折腾记录">
       <a href="posts/writer-tool.html">
         <span class="date">2026 · 10 · 22</span>
         <span class="title">现在加文章，只需要点一下</span>
         <span class="excerpt">给博客加了个本地写作台：网页里写完点发布，自动生成文章、更新首页、提交推送，代理也不用再管。</span>
       </a>
+      <span class="post-cat">折腾记录</span>
     </li>
 
-    <li>
-      <a href="posts/hello-github-pages.html">
-        <span class="date">2026 · 10 · 22</span>
-        <span class="title">把博客搬上 GitHub Pages，顺便记一下踩的坑</span>
-        <span class="excerpt">一个不需要服务器、不需要构建、不花钱的静态站点方案。以及为什么我在项目页里把绝对路径全改成了相对路径。</span>
-      </a>
-    </li>
-
-    <li>
+    <li data-slug="floating-ball" data-date="2026-09-20" data-category="前端">
       <a href="posts/floating-ball.html">
         <span class="date">2026 · 09 · 20</span>
         <span class="title">写一个会跟着鼠标放大的悬浮球</span>
-        <span class="excerpt">拖动、惯性、鼠标靠近时变大。看起来简单，实际上"手感"全藏在几个数字里。</span>
+        <span class="excerpt">拖动、惯性、鼠标靠近时变大：手感全藏在几个数字里。</span>
       </a>
+      <span class="post-cat">前端</span>
     </li>
 
-    <li>
+    <li data-slug="annihilation-ring" data-date="2026-08-15" data-category="游戏">
       <a href="posts/annihilation-ring.html">
         <span class="date">2026 · 08 · 15</span>
         <span class="title">一个游戏，两个版本：单机与局域网联机</span>
-        <span class="excerpt">同一个游戏逻辑，一份跑在浏览器单文件里，一份跑在 Node 服务端。同步维护两边的代价，以及怎么让它们不跑偏。</span>
+        <span class="excerpt">同一个游戏逻辑，一份跑在浏览器单文件里，一份跑在 Node 服务端。</span>
       </a>
+      <span class="post-cat">游戏</span>
     </li>
 
   </ul>
+
+  <p class="no-result" id="noResult" hidden>没有匹配的文章。换个关键词，或者清空筛选。</p>
 
 </main>
 
@@ -77,5 +109,6 @@
   </div>
 </footer>
 
+<script src="assets/search.js"></script>
 </body>
 </html>
