@@ -37,7 +37,7 @@
     <div class="prose">
 <h3>1.重复枚举</h3>
 <blockquote><p>给定一个仅包含数字 2-9 的字符串，返回所有它能表示的字母组合</p></blockquote>
-<p>因为电话号码的位数&lt;span style="color: rgb(255, 0, 0)"&gt;不确定，&lt;/span&gt;所以正常的循环嵌套不能使用，需要用递归：先枚举第一位，再调用函数本身枚举第2位，以此类推。</p>
+<p>因为电话号码的位数<span style="color: rgb(255, 0, 0)">不确定，</span>所以正常的循环嵌套不能使用，需要用递归：先枚举第一位，再调用函数本身枚举第2位，以此类推。</p>
 <pre><code>结构为：
 f(str, i)   i &lt; n ?    true:     f(str, i + 1)
                        false:    return</code></pre>

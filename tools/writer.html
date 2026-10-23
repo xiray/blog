@@ -279,6 +279,26 @@
   }
   #syncBtn .badge[hidden] { display: none; }
   #syncBtn.dirty { border-color: var(--accent-dim); color: var(--text); }
+
+  /* 表格尺寸选择：点工具栏的表格按钮弹出来 */
+  .tbl-pop {
+    position: fixed; z-index: 70; padding: .5rem .55rem .42rem;
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+  }
+  .tbl-pop[hidden] { display: none; }
+  .tbl-grid { display: grid; grid-template-columns: repeat(8, 1.15rem); gap: 2px; }
+  .tbl-cell {
+    width: 1.15rem; height: 1.15rem; padding: 0; border-radius: 2px;
+    border: 1px solid var(--line); background: transparent; cursor: pointer;
+  }
+  .tbl-cell:hover { border-color: var(--muted); }
+  .tbl-cell.on { background: var(--accent); border-color: var(--accent); }
+  .tbl-hint {
+    margin-top: .35rem; text-align: center; font-family: var(--mono);
+    font-size: .6875rem; color: var(--muted); white-space: nowrap;
+  }
+  .tbl-hint b { color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -410,6 +430,11 @@
   <div class="ai-dock-grip" id="aiDockGrip" title="拖动缩放"></div>
 </div>
 
+<div class="tbl-pop" id="tblPop" hidden>
+  <div class="tbl-grid" id="tblGrid"></div>
+  <div class="tbl-hint"><b id="tblCount">3 × 3</b> · 点一下确定</div>
+</div>
+
 <input type="file" id="filePicker" style="display:none">
 <input type="file" id="imagePicker" accept="image/*" style="display:none">
 
@@ -430,7 +455,8 @@
     aiDockFull: $("aiDockFull"), aiDockClose: $("aiDockClose"), aiDockGrip: $("aiDockGrip"),
     modeRich: $("modeRich"), modeMd: $("modeMd"),
     fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
-    filePicker: $("filePicker"), imagePicker: $("imagePicker")
+    filePicker: $("filePicker"), imagePicker: $("imagePicker"),
+    tblPop: $("tblPop"), tblGrid: $("tblGrid"), tblCount: $("tblCount")
   };
 
   var STORE = "xiray-writer-v2";
@@ -445,11 +471,58 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  /* Markdown 里的内联 HTML（颜色 span、<u>、<mark> 等）不能一律 esc，
+     否则「富文本上色 → 切 Markdown → 再切回来」就变成一串 &lt;span&gt; 字母。
+     只放行白名单标签，属性也过一遍白名单，防止粘来的东西带脚本。 */
+  var INLINE_HTML_TAGS = {
+    span: 1, u: 1, b: 1, strong: 1, i: 1, em: 1, s: 1, del: 1, strike: 1,
+    mark: 1, sub: 1, sup: 1, small: 1, br: 1, code: 1
+  };
+  var INLINE_HTML_ATTRS = { href: 1, src: 1, alt: 1, title: 1, class: 1, download: 1 };
+
+  function cleanInlineTag(raw) {
+    var m = String(raw).match(/^<\s*(\/?)\s*([a-zA-Z][\w-]*)/);
+    if (!m) return "";
+    var closing = !!m[1], name = m[2].toLowerCase();
+    if (!INLINE_HTML_TAGS[name]) return "";
+    if (closing) return "</" + name + ">";
+    if (name === "br") return "<br>";
+
+    var attrs = [];
+    String(raw).replace(/\s([a-zA-Z-:]+)\s*=\s*("([^"]*)"|'([^']*)')/g, function (_, k, _v, dq, sq) {
+      var key = k.toLowerCase();
+      var val = dq != null ? dq : sq;
+      if (key === "style") {
+        var st = keepStyle(val);
+        if (st) attrs.push('style="' + st.replace(/"/g, "&quot;") + '"');
+      } else if (INLINE_HTML_ATTRS[key]) {
+        attrs.push(key + '="' + String(val).replace(/"/g, "&quot;") + '"');
+      }
+      return "";
+    });
+    return "<" + name + (attrs.length ? " " + attrs.join(" ") : "") + ">";
+  }
+
   function inline(raw) {
-    var s = esc(raw), codes = [];
+    var s = String(raw), codes = [], tags = [];
+
+    // 1) 行内代码先摘出来：里面的内容既不当 HTML 也不当 Markdown
     s = s.replace(/`([^`]+)`/g, function (m, c) {
       codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000";
     });
+
+    // 2) 白名单内的内联 HTML 也摘成占位符
+    s = s.replace(/<\/?\s*[a-zA-Z][\w-]*[^<>]*>/g, function (m) {
+      var cleaned = cleanInlineTag(m);
+      if (!cleaned) return m;               // 不认识的标签照旧当文字处理
+      tags.push(cleaned);
+      return "\u0001" + (tags.length - 1) + "\u0001";
+    });
+
+    // 3) 剩下的纯文本才转义
+    s = esc(s);
+
+    s = s.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
     s = s.replace(/~~([^~]+)~~/g, "<s>$1</s>");
@@ -457,13 +530,15 @@
     s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener">$1</a>');
     s = s.replace(/\u0000(\d+)\u0000/g, function (m, i) {
-      return "<code>" + codes[Number(i)] + "</code>";
+      return "<code>" + esc(codes[Number(i)]) + "</code>";
     });
+    s = s.replace(/\u0001(\d+)\u0001/g, function (m, i) { return tags[Number(i)]; });
     return s;
   }
 
-  var HTML_BLOCK_TAGS = ["span", "a", "u", "div", "figure", "table", "img",
-                         "sup", "sub", "mark", "iframe", "video", "audio", "p"];
+  // 只有真正的块级标签才整行当 HTML 原样插入；span / a / u / img 这些是行内的，
+  // 必须交给 inline() 处理，否则同一行里的 **粗体**、*斜体* 就没人管了
+  var HTML_BLOCK_TAGS = ["div", "figure", "table", "iframe", "video", "audio", "p"];
 
   function collectHtml(lines, i) {
     var m = lines[i].trim().match(/^<([a-zA-Z][\w-]*)/);
@@ -597,6 +672,29 @@
     return keep.join("; ");
   }
 
+  /* 发布导出用的版本：除了颜色，还得留住粗体 / 斜体 / 下划线 / 对齐。
+     styleWithCSS 模式下 Chrome 用的是 <span style="font-weight: bold"> 而不是 <b>，
+     只留颜色的话这些格式一发布就没了。 */
+  var FMT_PROPS = [
+    "color", "background-color", "background",
+    "font-weight", "font-style", "font-variant",
+    "text-decoration", "text-decoration-line", "text-decoration-style",
+    "text-align"
+  ];
+
+  function keepFmtStyle(style) {
+    var keep = [];
+    String(style || "").split(";").forEach(function (part) {
+      var idx = part.indexOf(":");
+      if (idx < 0) return;
+      var k = part.slice(0, idx).trim().toLowerCase();
+      var v = part.slice(idx + 1).trim();
+      if (!v) return;
+      if (FMT_PROPS.indexOf(k) >= 0) keep.push(k + ": " + v);
+    });
+    return keep.join("; ");
+  }
+
   /* 代码块取纯文本：<br> 和块级子元素都要还原成换行，
      否则浏览器在 pre 里按回车产生的 <br> 会让多行代码在 Markdown 里被挤成一行 */
   function preText(node) {
@@ -699,10 +797,18 @@
         // 图片卡片上的文件名只是编辑器里的装饰，转 Markdown 时丢掉，
         // 让里面的 img 自己变成 ![alt](src)
         if ((node.getAttribute("class") || "").indexOf("ic-name") >= 0) return "";
-        var st = keepStyle(node.getAttribute("style"));
+        var style = node.getAttribute("style") || "";
         var content = inner(node);
-        if (st && content.trim()) return '<span style="' + st + '">' + content + "</span>";
-        return content;
+        // styleWithCSS 模式下，粗体 / 斜体 / 下划线都是 span 上的样式，
+        // 只留颜色的话这些格式一进 Markdown 就没了，得转回 Markdown 语法
+        var out = content;
+        if (/font-weight\s*:\s*(bold|bolder|[6-9]00)/i.test(style)) out = "**" + out + "**";
+        if (/font-style\s*:\s*italic/i.test(style)) out = "*" + out + "*";
+        if (/text-decoration[^;]*line-through/i.test(style)) out = "~~" + out + "~~";
+        else if (/text-decoration[^;]*underline/i.test(style)) out = "<u>" + out + "</u>";
+        var st = keepStyle(style);
+        if (st && content.trim()) return '<span style="' + st + '">' + out + "</span>";
+        return out;
       }
       case "div": {
         var st2 = keepStyle(node.getAttribute("style"));
@@ -736,7 +842,8 @@
   };
   var KEEP_ATTR = { href: 1, src: 1, alt: 1, "class": 1, download: 1, colspan: 1, rowspan: 1 };
 
-  function sanitize(root) {
+  function sanitize(root, opts) {
+    var keepFn = (opts && opts.fmt) ? keepFmtStyle : keepStyle;
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, null);
     var kill = [];
     while (walker.nextNode()) {
@@ -746,7 +853,7 @@
         var name = attr.name.toLowerCase();
         if (KEEP_ATTR[name]) return;
         if (name === "style") {
-          var st = keepStyle(attr.value);
+          var st = keepFn(attr.value);
           if (st) n.setAttribute("style", st); else n.removeAttribute("style");
           return;
         }
@@ -957,31 +1064,34 @@
     return el.rich;
   }
 
-  /* 代码块不能用 insertHTML 插：光标在段落里的时候，Chrome 认为 <pre> 嵌在 <p> 里非法，
-     会把它拆成一堆带等宽字体的 <span>——看起来像代码框，实际根本写不了代码。
+  /* 块级元素（代码块、表格）不能用 insertHTML 插：光标在段落里的时候，
+     Chrome 认为 <pre>/<table> 嵌在 <p> 里非法，会把它拆成一堆行内 span。
      所以直接建 DOM 节点，插在当前段落下面。 */
-  function insertCodeBlock(text) {
-    var pre = document.createElement("pre");
-    var code = document.createElement("code");
-    code.textContent = text == null ? "" : String(text);
-    pre.appendChild(code);
-
+  function insertBlockNode(node) {
     var host = blockHostAtCaret();
     if (!host || host === el.rich) {
-      el.rich.appendChild(pre);
+      el.rich.appendChild(node);
     } else if (host.nodeName === "P" && isEmptyBlock(host)) {
-      // 光标停在一个空行上：直接占掉这一行，代码块就出现在他想要的位置
-      host.parentNode.replaceChild(pre, host);
+      // 光标停在一个空行上：直接占掉这一行，块就出现在他想要的位置
+      host.parentNode.replaceChild(node, host);
     } else {
-      // 引用 / 列表 / 表格里不放代码块，挂到它们外面
+      // 引用 / 列表 / 表格里不放块，挂到它们外面
       var outer = host;
       while (outer.parentElement && outer.parentElement !== el.rich &&
              /^(BLOCKQUOTE|LI|UL|OL|TD|TH)$/.test(outer.parentElement.nodeName)) {
         outer = outer.parentElement;
       }
-      outer.parentNode.insertBefore(pre, outer.nextSibling);
+      outer.parentNode.insertBefore(node, outer.nextSibling);
     }
+    return node;
+  }
 
+  function insertCodeBlock(text) {
+    var pre = document.createElement("pre");
+    var code = document.createElement("code");
+    code.textContent = text == null ? "" : String(text);
+    pre.appendChild(code);
+    insertBlockNode(pre);
     ensureTailPara(pre);
     return pre;
   }
@@ -1056,13 +1166,7 @@
       else insertHtml('<a href="' + url + '" target="_blank" rel="noopener">' + esc(url) + "</a>");
       return;
     }
-    if (act === "table") {
-      insertHtml('<table><thead><tr><th>列一</th><th>列二</th><th>列三</th></tr></thead><tbody>' +
-        "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>" +
-        "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>" +
-        "</tbody></table><p><br></p>");
-      return;
-    }
+    if (act === "table") { openTblPicker(btn); return; }
     if (act === "hr") { insertHtml("<hr><p><br></p>"); return; }
     if (act === "code") {
       var s = String(window.getSelection() || "");
@@ -1152,13 +1256,136 @@
       if (el.md.selectionEnd > el.md.selectionStart) return wrapSelection(el.md, "`", "`");
       return insertAtCursor(el.md, "`代码`");
     }
-    if (act === "table") {
-      return insertAtCursor(el.md, "\n| 列一 | 列二 |\n| --- | --- |\n| 值 | 值 |\n");
-    }
+    if (act === "table") { openTblPicker(btn); return; }
     if (act === "hr") return insertAtCursor(el.md, "\n\n---\n\n");
     if (act === "attach") return el.filePicker.click();
     if (act === "image") return el.imagePicker.click();
   }
+
+  /* ============================================ 表格（自定义行列） */
+
+  var TBL_MAX = 8;
+  var tblPick = { c: 3, r: 3 };
+
+  function buildTblGrid() {
+    if (el.tblGrid.childNodes.length) return;
+    for (var r = 1; r <= TBL_MAX; r++) {
+      for (var c = 1; c <= TBL_MAX; c++) {
+        var d = document.createElement("button");
+        d.type = "button";
+        d.className = "tbl-cell";
+        d.setAttribute("data-r", r);
+        d.setAttribute("data-c", c);
+        d.title = c + " 列 × " + r + " 行";
+        el.tblGrid.appendChild(d);
+      }
+    }
+  }
+
+  function paintTblPick(c, r) {
+    tblPick = { c: c, r: r };
+    var cells = el.tblGrid.children;
+    for (var i = 0; i < cells.length; i++) {
+      var cr = Number(cells[i].getAttribute("data-r"));
+      var cc = Number(cells[i].getAttribute("data-c"));
+      cells[i].classList.toggle("on", cr <= r && cc <= c);
+    }
+    el.tblCount.textContent = c + " 列 × " + r + " 行";
+  }
+
+  function openTblPicker(btn) {
+    buildTblGrid();
+    paintTblPick(tblPick.c, tblPick.r);
+    el.tblPop.hidden = false;
+    var b = btn.getBoundingClientRect();
+    var w = el.tblPop.offsetWidth, h = el.tblPop.offsetHeight;
+    var left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
+    var top = b.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, b.top - h - 6);
+    el.tblPop.style.left = left + "px";
+    el.tblPop.style.top = top + "px";
+  }
+
+  function closeTblPicker() {
+    el.tblPop.hidden = true;
+  }
+
+  function insertTable(cols, rows) {
+    var table = document.createElement("table");
+    var thead = document.createElement("thead");
+    var trh = document.createElement("tr");
+    for (var c = 0; c < cols; c++) {
+      var th = document.createElement("th");
+      th.textContent = "列 " + (c + 1);
+      trh.appendChild(th);
+    }
+    thead.appendChild(trh);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    for (var r = 0; r < rows; r++) {
+      var tr = document.createElement("tr");
+      for (var c2 = 0; c2 < cols; c2++) {
+        var td = document.createElement("td");
+        td.innerHTML = "<br>";
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+
+    insertBlockNode(table);
+    ensureTailPara(table);
+    var first = table.querySelector("tbody td") || table.querySelector("th");
+    if (first) placeCaret(first, false);
+    return table;
+  }
+
+  function mdTable(cols, rows) {
+    var head = [], sep = [], empty = [];
+    for (var c = 0; c < cols; c++) {
+      head.push("列 " + (c + 1));
+      sep.push("---");
+      empty.push(" ");
+    }
+    var lines = ["| " + head.join(" | ") + " |", "| " + sep.join(" | ") + " |"];
+    for (var r = 0; r < rows; r++) lines.push("| " + empty.join(" | ") + " |");
+    return "\n" + lines.join("\n") + "\n";
+  }
+
+  el.tblGrid.addEventListener("mouseover", function (e) {
+    var t = e.target.closest ? e.target.closest(".tbl-cell") : null;
+    if (!t) return;
+    paintTblPick(Number(t.getAttribute("data-c")), Number(t.getAttribute("data-r")));
+  });
+
+  el.tblGrid.addEventListener("click", function (e) {
+    var t = e.target.closest ? e.target.closest(".tbl-cell") : null;
+    if (!t) return;
+    var c = Number(t.getAttribute("data-c")), r = Number(t.getAttribute("data-r"));
+    closeTblPicker();
+    if (mode === "md") {
+      insertAtCursor(el.md, mdTable(c, r));
+      renderMdPreview();
+    } else {
+      restoreSelection();
+      el.rich.focus();
+      insertTable(c, r);
+      saveSelection();
+      updateToolbarState();
+    }
+  });
+
+  document.addEventListener("click", function (e) {
+    if (el.tblPop.hidden) return;
+    if (el.tblPop.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('[data-act="table"]')) return;
+    closeTblPicker();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && el.tblPop && !el.tblPop.hidden) closeTblPicker();
+  });
 
   /* ============================================ 附件 / 图片 */
 
@@ -1806,7 +2033,7 @@
   function currentBodyHtml() {
     if (mode === "rich") {
       var clone = el.rich.cloneNode(true);
-      sanitize(clone);
+      sanitize(clone, { fmt: true });
       // 代码块回车用的零宽锚点只在编辑器里有用，别带进线上文章
       return clone.innerHTML.replace(/\u200b/g, "");
     }
