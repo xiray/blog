@@ -492,6 +492,24 @@
     return keep.join("; ");
   }
 
+  /* 代码块取纯文本：<br> 和块级子元素都要还原成换行，
+     否则浏览器在 pre 里按回车产生的 <br> 会让多行代码在 Markdown 里被挤成一行 */
+  function preText(node) {
+    var out = "";
+    (function walk(n) {
+      Array.prototype.forEach.call(n.childNodes, function (c) {
+        if (c.nodeType === 3) { out += c.nodeValue; return; }
+        if (c.nodeType !== 1) return;
+        if (c.nodeName === "BR") { out += "\n"; return; }
+        var isBlock = /^(DIV|P|LI|BLOCKQUOTE)$/.test(c.nodeName);
+        if (isBlock && out && out.slice(-1) !== "\n") out += "\n";
+        walk(c);
+        if (isBlock && out.slice(-1) !== "\n") out += "\n";
+      });
+    })(node);
+    return out.replace(/\u200b/g, "");   // 去掉代码块里的零宽换行锚点
+  }
+
   function nodeToMd(node, inPre) {
     if (node.nodeType === 3) return node.nodeValue.replace(/\u00a0/g, " ");
     if (node.nodeType !== 1) return "";
@@ -520,7 +538,7 @@
         return "`" + node.textContent + "`";
       case "pre": {
         var codeEl = node.querySelector("code");
-        var raw = (codeEl ? codeEl.textContent : node.textContent).replace(/\n+$/, "");
+        var raw = preText(codeEl || node).replace(/^\n+|\n+$/g, "");
         return "\n```\n" + raw + "\n```\n\n";
       }
       case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
@@ -928,6 +946,169 @@
 
   el.rich.addEventListener("keyup", updateToolbarState);
   el.rich.addEventListener("mouseup", updateToolbarState);
+
+  /* ============================================ 引用 / 代码块的删除修复
+     Chrome 的原生行为：块内文字删光后，空的 blockquote / pre 会一直留在文档里；
+     在块首按退格还会把块并进上一段，并塞进一堆内联样式。两种都很坑，这里接管。 */
+
+  function blockOf(node) {
+    var n = node && (node.nodeType === 1 ? node : node.parentElement);
+    while (n && n !== el.rich) {
+      if (n.nodeName === "BLOCKQUOTE" || n.nodeName === "PRE") return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+
+  function isEmptyBlock(b) {
+    // \u200b 是代码块的换行锚点，不能算内容，否则空的代码块永远删不掉
+    if (b.textContent.replace(/[\s\u00a0\u200b]/g, "")) return false;
+    return !b.querySelector("img, table, hr, video, audio, iframe, a[class]");
+  }
+
+  function placeCaret(node, atEnd) {
+    try {
+      var r = document.createRange();
+      r.selectNodeContents(node);
+      r.collapse(!atEnd);
+      var s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      saveSelection();
+    } catch (e) {}
+  }
+
+  // 空块 → 换成普通空段落；有内容就移到上一段末尾
+  function dropBlock(b) {
+    var prev = b.previousElementSibling;
+    var p = document.createElement("p");
+    p.innerHTML = "<br>";
+    b.parentNode.replaceChild(p, b);
+    if (prev && prev.nodeName !== "BR") placeCaret(prev, true);
+    else placeCaret(p, false);
+    return p;
+  }
+
+  // 块 → 普通段落，保留文字但清掉浏览器塞进来的内联样式。
+  // 块里本来就有多个段落时要逐个拆开，不能整段塞进一个 <p>（会变成非法嵌套）。
+  function unwrapBlock(b) {
+    var made = [];
+    var frag = document.createDocumentFragment();
+
+    function makeP(html) {
+      var p = document.createElement("p");
+      p.innerHTML = html || "<br>";
+      made.push(p);
+      return p;
+    }
+
+    if (b.nodeName === "PRE") {
+      var p = document.createElement("p");
+      preText(b).split("\n").forEach(function (line, i) {
+        if (i) p.appendChild(document.createElement("br"));
+        p.appendChild(document.createTextNode(line));
+      });
+      if (!p.firstChild) p.innerHTML = "<br>";
+      made.push(p);
+      frag.appendChild(p);
+    } else {
+      var blockKids = Array.prototype.filter.call(b.children, function (c) {
+        return /^(P|H1|H2|H3|H4|H5|H6|DIV|BLOCKQUOTE|UL|OL|PRE)$/.test(c.nodeName);
+      });
+      if (blockKids.length) {
+        Array.prototype.forEach.call(blockKids, function (c) {
+          if (/^(P|DIV)$/.test(c.nodeName)) frag.appendChild(makeP(c.innerHTML));
+          else frag.appendChild(c.cloneNode(true));
+        });
+      } else {
+        frag.appendChild(makeP(b.innerHTML));
+      }
+    }
+
+    Array.prototype.slice.call(frag.querySelectorAll("[style]")).forEach(function (n) {
+      n.removeAttribute("style");
+    });
+    b.parentNode.replaceChild(frag, b);
+    if (made.length) placeCaret(made[0], false);
+    return made[0] || null;
+  }
+
+  function caretAtStart(b) {
+    var s = window.getSelection();
+    if (!s || !s.rangeCount) return false;
+    var r = s.getRangeAt(0).cloneRange();
+    r.selectNodeContents(b);
+    r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+    return r.toString().replace(/[\s\u00a0\u200b]/g, "") === "";
+  }
+
+  // 光标所在的最内层段落（blockquote > p 里的 p）
+  function leafBlockOf(node, root) {
+    var n = node && (node.nodeType === 1 ? node : node.parentElement);
+    while (n && n !== root) {
+      if (/^(P|H1|H2|H3|H4|H5|H6|LI|DIV)$/.test(n.nodeName)) return n;
+      n = n.parentElement;
+    }
+    return null;
+  }
+
+  el.rich.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var b = null, sel = window.getSelection();
+    if (sel && sel.rangeCount) b = blockOf(sel.anchorNode);
+    if (!b) return;
+
+    // 代码块里按回车：插入 <br> 当换行锚点，后面再跟一个零宽字符。
+    // 不加零宽字符的话，Chrome 会把光标吸附到上一行文本末尾，接着敲的字会跑到上一行去。
+    // 零宽字符只在编辑区里存在，转 Markdown 时由 preText() 剥掉。
+    if (e.key === "Enter" && b.nodeName === "PRE") {
+      e.preventDefault();
+      var r0 = sel.getRangeAt(0);
+      r0.deleteContents();
+      var br = document.createElement("br");
+      r0.insertNode(br);
+      var anchor = document.createTextNode("\u200b");
+      br.parentNode.insertBefore(anchor, br.nextSibling);
+      r0.setStart(anchor, 1);
+      r0.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r0);
+      saveSelection();
+      return;
+    }
+
+    if (e.key !== "Backspace" && e.key !== "Delete") return;
+
+    var collapsed = !sel || !sel.rangeCount || sel.isCollapsed;
+    if (!collapsed) return;   // 有选区时交给浏览器正常删除
+
+    if (isEmptyBlock(b)) {
+      e.preventDefault();
+      dropBlock(b);
+      updateToolbarState();
+      return;
+    }
+
+    // 块首按退格 = 取消这个块的格式，而不是合并成一堆带样式的碎片
+    if (e.key === "Backspace" && caretAtStart(b)) {
+      e.preventDefault();
+      var leaf = leafBlockOf(sel.anchorNode, b);
+      var kids = Array.prototype.filter.call(b.children, function (c) {
+        return /^(P|H1|H2|H3|H4|H5|H6|DIV)$/.test(c.nodeName);
+      });
+      // 引用块里有多个段落时，只删掉光标所在的这个空段落，别把整个引用拆了
+      if (leaf && kids.length > 1 && isEmptyBlock(leaf)) {
+        var prevLeaf = leaf.previousElementSibling;
+        leaf.parentNode.removeChild(leaf);
+        if (prevLeaf) placeCaret(prevLeaf, true);
+        else placeCaret(b, false);
+      } else {
+        unwrapBlock(b);
+      }
+      updateToolbarState();
+    }
+  });
+
   // 光标一移动就同步下拉框和选区记忆（方向键、点选都覆盖）
   document.addEventListener("selectionchange", function () {
     if (mode !== "rich") return;
