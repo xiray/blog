@@ -8,6 +8,7 @@ xiray 博客写作台 —— 本地服务
   · 发布 / 编辑已有文章 / 删除文章
   · 类别管理（可自定义新增）
   · 附件上传
+  · AI 问答（接 DeepSeek 等 OpenAI 兼容接口，流式输出）
   · 自动维护首页列表、搜索索引
   · 代理自动探测后提交推送
 
@@ -26,8 +27,9 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 try:
     import winreg
@@ -650,6 +652,282 @@ def save_upload(filename, b64data):
             "compressed": compressed, "note": note}
 
 
+# ================================================================ AI 问答
+
+AI_CONFIG = os.path.join(TOOLS, ".ai-config.json")
+AI_DEFAULT_BASE = "https://api.deepseek.com"
+AI_DEFAULT_MODEL = "deepseek-chat"
+AI_MAX_MESSAGES = 40          # 只带最近这么多轮，避免请求无限膨胀
+AI_CONNECT_TIMEOUT = 25
+AI_READ_TIMEOUT = 180
+
+AI_ERRORS = {
+    400: "请求被拒绝（400），多半是模型名不对，去「设置」里点「拉取模型列表」看看有哪些",
+    401: "API Key 无效（401），回「设置」里重新填一次",
+    402: "账户余额不足（402），去 platform.deepseek.com 充值",
+    403: "没有权限访问这个模型（403）",
+    404: "接口地址不对（404），检查 Base URL 是不是被改错了",
+    422: "参数不被接受（422），可能是模型不支持这次请求的格式",
+    429: "请求太频繁或额度用完了（429），等一会儿再试",
+    500: "服务端出错了（500），过一会儿再试",
+    502: "网关错误（502）：代理没连上目标地址，检查 Base URL 或关掉代理再试",
+    503: "服务暂时不可用（503），过一会儿再试",
+    504: "网关超时（504）：代理在等上游响应时超时了",
+}
+
+
+def load_ai_config():
+    raw = read_json(AI_CONFIG, {}) or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    base = (raw.get("base_url") or AI_DEFAULT_BASE).strip().rstrip("/")
+    model = (raw.get("model") or AI_DEFAULT_MODEL).strip()
+    key = (raw.get("api_key") or "").strip()
+    source = "file"
+    if not key:
+        key = (os.environ.get("DEEPSEEK_API_KEY") or "").strip()
+        source = "env" if key else ""
+    return {"base_url": base, "model": model, "api_key": key, "key_source": source}
+
+
+def mask_key(k):
+    if not k:
+        return ""
+    if len(k) <= 8:
+        return "****"
+    return k[:3] + "****" + k[-4:]
+
+
+def public_ai_config(cfg=None):
+    cfg = cfg or load_ai_config()
+    return {
+        "base_url": cfg["base_url"],
+        "model": cfg["model"],
+        "has_key": bool(cfg["api_key"]),
+        "key_hint": mask_key(cfg["api_key"]),
+        "key_source": cfg["key_source"],
+        "config_path": os.path.relpath(AI_CONFIG, ROOT).replace(os.sep, "/"),
+    }
+
+
+def save_ai_config(payload):
+    cfg = load_ai_config()
+    base = (payload.get("base_url") or cfg["base_url"]).strip().rstrip("/")
+    if not re.match(r"^https?://", base):
+        raise ValueError("Base URL 必须以 http:// 或 https:// 开头")
+    model = (payload.get("model") or cfg["model"]).strip()
+    if not model:
+        raise ValueError("模型名不能为空")
+
+    key = payload.get("api_key")
+    if key is None or key == "":
+        key = cfg["api_key"]          # 留空表示不改
+    elif key.strip() == "__clear__":
+        key = ""
+    else:
+        key = key.strip()
+
+    data = {"base_url": base, "model": model, "api_key": key,
+            "updated": time.strftime("%Y-%m-%d %H:%M:%S")}
+    write_json(AI_CONFIG, data)
+    try:
+        os.chmod(AI_CONFIG, 0o600)
+    except Exception:
+        pass
+    return public_ai_config(load_ai_config())
+
+
+def _is_local_url(u):
+    try:
+        host = urlsplit(u).hostname or ""
+    except Exception:
+        return False
+    return host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.endswith(".local")
+
+
+def ai_routes(cfg):
+    """(标签, ProxyHandler)。先直连，再系统代理，最后才去探测——探测要几秒，别每次都跑。"""
+    if _is_local_url(cfg["base_url"]):
+        # 本机地址走代理毫无意义，只会把「连接被拒」变成看不懂的 502
+        yield "直连", urllib.request.ProxyHandler({})
+        return
+
+    seen = []
+    yield "直连", urllib.request.ProxyHandler({})
+    try:
+        sys_proxy = urllib.request.getproxies()
+    except Exception:
+        sys_proxy = {}
+    if sys_proxy:
+        seen.append("sys")
+        yield "系统代理", urllib.request.ProxyHandler()
+    try:
+        p = find_proxy()
+    except Exception:
+        p = None
+    if p and "sys" not in seen:
+        yield "代理 " + p.replace("http://", ""), \
+            urllib.request.ProxyHandler({"http": p, "https": p})
+
+
+def ai_connect(cfg, path, data=None, timeout=None, accept="application/json"):
+    """连上游。返回 (路由标签, response)。HTTP 状态错误会立刻抛出，不换路由重试。"""
+    if not cfg["api_key"]:
+        raise AIError("还没配置 API Key，点右上角「设置」填一个", 0, "")
+
+    url = cfg["base_url"] + path
+    timeout = timeout or (AI_CONNECT_TIMEOUT + AI_READ_TIMEOUT)
+    errors = []
+
+    for label, handler in ai_routes(cfg):
+        opener = urllib.request.build_opener(handler)
+        req = urllib.request.Request(url, data=data, method="POST" if data else "GET")
+        req.add_header("Authorization", "Bearer " + cfg["api_key"])
+        req.add_header("Accept", accept if not data else "application/json")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("User-Agent", "xiray-writer-ai/1.0")
+        try:
+            return label, opener.open(req, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", "replace")[:400]
+            except Exception:
+                pass
+            msg = AI_ERRORS.get(e.code) or ("接口返回 %d" % e.code)
+            if label != "直连":
+                msg += "（经由 %s）" % label
+            if detail:
+                msg += "\n上游原话：" + _ai_detail(detail)
+            raise AIError(msg, e.code, label)
+        except Exception as e:
+            errors.append("%s：%s" % (label, e))
+            continue
+
+    raise AIError("连不上 %s\n%s" % (cfg["base_url"], " / ".join(errors)), 0, "")
+
+
+def _ai_detail(raw):
+    try:
+        obj = json.loads(raw)
+        err = obj.get("error")
+        if isinstance(err, dict):
+            return err.get("message") or raw
+        if isinstance(err, str):
+            return err
+        return obj.get("message") or raw
+    except Exception:
+        return raw.strip()
+
+
+class AIError(Exception):
+    def __init__(self, msg, code=0, route=""):
+        Exception.__init__(self, msg)
+        self.msg = msg
+        self.code = code
+        self.route = route
+
+
+def ai_list_models(cfg):
+    _, resp = ai_connect(cfg, "/models", timeout=25)
+    with resp:
+        obj = json.loads(resp.read().decode("utf-8", "replace"))
+    items = obj.get("data") if isinstance(obj, dict) else None
+    if not isinstance(items, list):
+        raise AIError("这个接口没有返回模型列表，手动填模型名就行", 0, "")
+    ids = []
+    for it in items:
+        mid = it.get("id") if isinstance(it, dict) else None
+        if mid and mid not in ids:
+            ids.append(mid)
+    return ids
+
+
+def ai_chat(handler, payload):
+    """流式转发上游的 SSE 给浏览器。每个事件都是一行 `data: {json}`。"""
+    cfg = load_ai_config()
+    if not cfg["api_key"]:
+        return handler._json({"ok": False, "need_config": True,
+                              "error": "还没配置 API Key，点右上角「设置」填一个"})
+
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return handler._json({"ok": False, "error": "没有对话内容"}, 400)
+
+    clean = []
+    for m in messages[-AI_MAX_MESSAGES:]:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content")
+        if role in ("user", "assistant", "system") and isinstance(content, str) and content.strip():
+            clean.append({"role": role, "content": content})
+    if not clean:
+        return handler._json({"ok": False, "error": "没有可发送的内容"}, 400)
+
+    model = (payload.get("model") or cfg["model"]).strip()
+    body = json.dumps({"model": model, "messages": clean, "stream": True},
+                      ensure_ascii=False).encode("utf-8")
+
+    try:
+        route, resp = ai_connect(cfg, "/chat/completions", data=body,
+                                 timeout=AI_CONNECT_TIMEOUT + AI_READ_TIMEOUT,
+                                 accept="text/event-stream")
+    except AIError as e:
+        return handler._json({"ok": False, "error": e.msg, "code": e.code})
+
+    handler.send_response(200)
+    handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Connection", "close")
+    handler.send_header("X-Accel-Buffering", "no")
+    handler.end_headers()
+
+    def emit(obj):
+        handler.wfile.write(("data: " + json.dumps(obj, ensure_ascii=False) + "\n\n")
+                            .encode("utf-8"))
+        handler.wfile.flush()
+
+    emit({"type": "meta", "model": model, "route": route})
+
+    reason_open = False
+    try:
+        with resp:
+            for raw in resp:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                chunk = line[5:].strip()
+                if chunk == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(chunk)
+                except Exception:
+                    continue
+                choices = obj.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                think = delta.get("reasoning_content")
+                if think:
+                    reason_open = True
+                    emit({"type": "reason", "text": think})
+                text = delta.get("content")
+                if text:
+                    if reason_open:
+                        reason_open = False
+                        emit({"type": "reason_end"})
+                    emit({"type": "delta", "text": text})
+        emit({"type": "done"})
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        return                                  # 浏览器点了停止，正常退出
+    except Exception as e:
+        try:
+            emit({"type": "error", "error": "读取上游数据时出错：%s" % e})
+        except Exception:
+            pass
+
+
 # ================================================================ HTTP
 
 CONTENT_TYPES = {
@@ -694,6 +972,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(500, "找不到 writer.html", "text/plain; charset=utf-8")
             with open(fp, "rb") as f:
                 return self._send(200, f.read(), CONTENT_TYPES[".html"])
+
+        if path in ("/ai", "/ai.html"):
+            fp = os.path.join(TOOLS, "ai.html")
+            if not os.path.exists(fp):
+                return self._send(500, "找不到 ai.html", "text/plain; charset=utf-8")
+            with open(fp, "rb") as f:
+                return self._send(200, f.read(), CONTENT_TYPES[".html"])
+
+        if path == "/api/ai/config":
+            return self._json({"ok": True, "config": public_ai_config()})
 
         if path == "/api/info":
             return self._json({"root": ROOT, "site": SITE, "port": PORT})
@@ -753,12 +1041,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self._handle_categories(payload))
             if path == "/api/proxy":
                 return self._json({"ok": True, "proxy": find_proxy(force=True) or "直连"})
+            if path == "/api/ai/config":
+                return self._json({"ok": True, "config": save_ai_config(payload)})
+            if path == "/api/ai/models":
+                return self._json(self._handle_ai_models(payload))
+            if path == "/api/ai/chat":
+                return ai_chat(self, payload)
+        except AIError as e:
+            return self._json({"ok": False, "error": e.msg, "code": e.code})
         except ValueError as e:
             return self._json({"ok": False, "stage": "check", "error": str(e)})
         except Exception as e:
             return self._json({"ok": False, "stage": "server", "error": repr(e)})
 
         return self._json({"ok": False, "error": "未知接口"}, 404)
+
+    def _handle_ai_models(self, payload):
+        cfg = load_ai_config()
+        # 允许用表单里的值先试，不用先存
+        base = (payload.get("base_url") or "").strip().rstrip("/")
+        key = (payload.get("api_key") or "").strip()
+        if base:
+            cfg["base_url"] = base
+        if key:
+            cfg["api_key"] = key
+        return {"ok": True, "models": ai_list_models(cfg),
+                "base_url": cfg["base_url"]}
 
     def _handle_categories(self, payload):
         cats = load_categories()
@@ -816,6 +1124,7 @@ def serve():
     print("")
     print("  xiray 写作台已启动")
     print("  地址: http://127.0.0.1:%d" % PORT)
+    print("  AI  : http://127.0.0.1:%d/ai" % PORT)
     print("  目录: %s" % ROOT)
     print("  关闭: 直接关掉这个窗口")
     print("")

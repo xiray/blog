@@ -206,6 +206,7 @@
         <button id="modeMd">Markdown</button>
       </div>
       <button class="ghost" id="newBtn">新建</button>
+      <button class="ghost" id="aiBtn">AI 问答</button>
       <button class="primary" id="pubBtn">发布</button>
     </div>
   </header>
@@ -323,6 +324,7 @@
     richWrap: $("richWrap"), toolbar: $("toolbar"), blockFmt: $("blockFmt"),
     postItems: $("postItems"), postCount: $("postCount"),
     pubBtn: $("pubBtn"), newBtn: $("newBtn"), newBtn2: $("newBtn2"),
+    aiBtn: $("aiBtn"),
     modeRich: $("modeRich"), modeMd: $("modeMd"),
     fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
     filePicker: $("filePicker"), imagePicker: $("imagePicker")
@@ -1444,6 +1446,9 @@
   el.pubBtn.addEventListener("click", publish);
   el.newBtn.addEventListener("click", newPost);
   el.newBtn2.addEventListener("click", newPost);
+  el.aiBtn.addEventListener("click", function () {
+    window.open("/ai", "_blank", "noopener");
+  });
   el.modeRich.addEventListener("click", function () { setMode("rich"); });
   el.modeMd.addEventListener("click", function () { setMode("md"); });
 
