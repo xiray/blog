@@ -666,16 +666,46 @@
 
   /* ============================================ 工具栏 */
 
+  /* 选区记忆：下拉框、取色器必须让浏览器执行默认行为才能弹出，
+     但那样编辑区会失焦，所以点它们之前先把选区存下来，执行命令前再恢复。 */
+  var savedRange = null;
+
+  function saveSelection() {
+    if (mode !== "rich") return;
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var r = sel.getRangeAt(0);
+    if (el.rich.contains(r.commonAncestorContainer)) savedRange = r.cloneRange();
+  }
+
+  function restoreSelection() {
+    if (!savedRange) return false;
+    try {
+      el.rich.focus();
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+      return true;
+    } catch (e) {
+      savedRange = null;
+      return false;
+    }
+  }
+
   function exec(cmd, value) {
+    restoreSelection();
     el.rich.focus();
     try { document.execCommand("styleWithCSS", false, true); } catch (e) {}
     document.execCommand(cmd, false, value || null);
+    saveSelection();
     updateToolbarState();
   }
 
   function insertHtml(html) {
+    restoreSelection();
     el.rich.focus();
     document.execCommand("insertHTML", false, html);
+    saveSelection();
   }
 
   function updateToolbarState() {
@@ -688,11 +718,34 @@
       try { on = document.queryCommandState(cmd); } catch (e) {}
       btn.classList.toggle("on", on);
     });
+    syncBlockFmt();
+  }
+
+  /* 下拉框跟随光标所在段落的实际格式，而不是点完就跳回「正文」 */
+  function syncBlockFmt() {
+    if (mode !== "rich") return;
+    var v = "";
+    try {
+      v = String(document.queryCommandValue("formatBlock") || "");
+    } catch (e) {}
+    v = v.toLowerCase().replace(/[<>]/g, "").trim();
+    var map = {
+      h1: "h2", h2: "h2", h3: "h3", h4: "h4", h5: "h4", h6: "h4",
+      blockquote: "blockquote", pre: "pre"
+    };
+    el.blockFmt.value = map[v] || "p";
   }
 
   el.toolbar.addEventListener("mousedown", function (e) {
-    if (e.target.closest(".tb") || e.target.closest("select") || e.target.closest(".color-btn")) {
+    // 下拉框和取色器靠浏览器默认的 mousedown 行为弹出，不能 preventDefault，
+    // 否则点了没反应。改为先记住选区，执行命令前再恢复。
+    if (e.target.closest("select") || e.target.closest(".color-btn")) {
+      saveSelection();
+      return;
+    }
+    if (e.target.closest(".tb")) {
       e.preventDefault();
+      return;
     }
   });
 
@@ -738,11 +791,27 @@
       var prefix = { p: "", h2: "## ", h3: "### ", h4: "#### ", blockquote: "> ", pre: "```\n\n```" }[v] || "";
       insertAtCursor(el.md, prefix);
       renderMdPreview();
+      el.blockFmt.value = "p";
       return;
     }
-    if (v === "pre") insertHtml("<pre><code>代码</code></pre><p><br></p>");
-    else exec("formatBlock", v);
-    el.blockFmt.value = "p";
+    if (v === "pre") {
+      insertHtml('<pre><code>代码</code></pre>');
+      // 插入后把光标圈到「代码」上，直接输入就替换掉
+      try {
+        var code = el.rich.querySelector("pre:last-of-type code");
+        if (code) {
+          var r = document.createRange();
+          r.selectNodeContents(code);
+          var s = window.getSelection();
+          s.removeAllRanges();
+          s.addRange(r);
+          saveSelection();
+        }
+      } catch (e) {}
+    } else {
+      exec("formatBlock", v);
+    }
+    updateToolbarState();
   });
 
   el.fgColor.addEventListener("input", function () {
@@ -859,6 +928,12 @@
 
   el.rich.addEventListener("keyup", updateToolbarState);
   el.rich.addEventListener("mouseup", updateToolbarState);
+  // 光标一移动就同步下拉框和选区记忆（方向键、点选都覆盖）
+  document.addEventListener("selectionchange", function () {
+    if (mode !== "rich") return;
+    saveSelection();
+    updateToolbarState();
+  });
 
   /* ============================================ 工具函数 */
 
