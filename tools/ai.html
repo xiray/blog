@@ -341,6 +341,37 @@
   @media (max-width: 460px) { body.mini .status { display: none; } }
   @media (max-width: 400px) { body.mini .chip { max-width: 5.5rem; } }
   @media (max-width: 345px) { body.mini .bar .brand { display: none; } }
+
+  /* 对话 / Agent 切换 */
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    border: none; background: none; color: var(--muted); cursor: pointer;
+    font-size: .75rem; padding: .25rem .55rem; line-height: 1.2;
+  }
+  .seg button.active { background: var(--bg-soft); color: var(--accent); }
+  body.mini .seg button { padding: .2rem .45rem; font-size: .6875rem; }
+
+  /* Agent 改动卡片 */
+  .agent-card {
+    margin-top: .55rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg-soft); overflow: hidden;
+  }
+  .agent-card .hd {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .45rem .6rem; font-size: .75rem; color: var(--accent);
+    border-bottom: 1px dashed var(--line);
+  }
+  .agent-card .ops { padding: .45rem .6rem; font-size: .75rem; color: var(--text-dim); }
+  .agent-card .ops li { margin: .15rem 0; list-style: none; }
+  .agent-card .ops li::before { content: "· "; color: var(--accent); }
+  .agent-card .ft { display: flex; gap: .4rem; padding: 0 .6rem .55rem; }
+  .agent-card .ft button {
+    font-size: .75rem; padding: .25rem .6rem; border-radius: 5px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text-dim);
+  }
+  .agent-card .ft button.go { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .agent-card .ft button:disabled { opacity: .5; cursor: default; }
+  .agent-card.done { opacity: .72; }
 </style>
 </head>
 <body>
@@ -351,6 +382,10 @@
     <div class="actions">
       <span class="chip" id="modelChip">—</span>
       <span class="status" id="status">就绪</span>
+      <div class="seg" id="modeSeg">
+        <button id="modeChat" class="active" title="普通问答">对话</button>
+        <button id="modeAgent" title="让 AI 直接改文章（要在写作台的小窗里用）">Agent</button>
+      </div>
       <button class="ghost" id="sizeBtn" title="切换整页 / 小窗">小窗</button>
       <button class="ghost" id="clearBtn">清空</button>
       <button class="ghost" id="setBtn">设置</button>
@@ -453,7 +488,8 @@
     refBtn: $("refBtn"), refPop: $("refPop"), refList: $("refList"),
     refSearch: $("refSearch"), refFoot: $("refFoot"),
     refChip: $("refChip"), refName: $("refName"), refSize: $("refSize"),
-    refClear: $("refClear")
+    refClear: $("refClear"),
+    modeSeg: $("modeSeg"), modeChat: $("modeChat"), modeAgent: $("modeAgent")
   };
 
   /* ---------------- 模式：整页 / 小窗 / 内嵌 ----------------
@@ -492,6 +528,32 @@
 
   var LS_MSG = "xiray.ai.messages";
   var LS_MODEL = "xiray.ai.model";
+  var LS_AGENT = "xiray.ai.agent";
+
+  /* Agent 模式：AI 直接改写作台里的文章。只能在写作台的小窗里用，
+     因为它要拿到父窗口的编辑器，并且把改动落回去。 */
+  var agentOn = false;
+  try { agentOn = localStorage.getItem(LS_AGENT) === "1"; } catch (e) {}
+
+  function agentReady() {
+    return !!(window.parent && window.parent !== window &&
+              window.parent.__XI_AGENT);
+  }
+
+  function setAgentMode(on) {
+    agentOn = !!on;
+    try { localStorage.setItem(LS_AGENT, agentOn ? "1" : "0"); } catch (e) {}
+    el.modeChat.classList.toggle("active", !agentOn);
+    el.modeAgent.classList.toggle("active", agentOn);
+    document.body.classList.toggle("agent", agentOn);
+    if (agentOn && !agentReady()) {
+      setStatus("Agent 模式要在写作台的 AI 小窗里用", "err");
+    } else {
+      setStatus(agentOn ? "Agent 模式：AI 可以直接改文章" : "对话模式");
+    }
+    syncAutoRef();
+    renderAll();
+  }
 
   var cfg = { base_url: "", model: "", has_key: false, key_hint: "", config_path: "" };
   var messages = [];        // {role, content, reasoning?, ref?}
@@ -699,6 +761,9 @@
       });
       tools.appendChild(cp);
       wrap.appendChild(tools);
+
+      var card = buildAgentCard(m);
+      if (card) wrap.appendChild(card);
     }
     return wrap;
   }
@@ -717,8 +782,148 @@
     return d;
   }
 
-  function copyText(t) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+  /* ---------------- Agent 模式：解析并落改动 ---------------- */
+
+  function agentCtx() {
+    try {
+      var a = window.parent && window.parent.__XI_AGENT;
+      return a ? a.context() : null;
+    } catch (e) { return null; }
+  }
+
+  function agentPrompt(c) {
+    var text = String((c && c.text) || "").trim();
+    var cut = text.length > REF_MAX ? text.slice(0, REF_MAX) : text;
+    return "你是写作台里的文章编辑助手，可以直接改用户正在写的这篇文章。\n" +
+      "当前文章：\n标题：" + ((c && c.title) || "（未命名）") + "\n" +
+      "短名（slug）：" + ((c && c.slug) || "（还没定）") + "\n" +
+      "类别：" + ((c && c.category) || "未分类") + "\n" +
+      "日期：" + ((c && c.date) || "") + "\n" +
+      "篇幅：约 " + text.length + " 字符\n" +
+      (text ? "---------- 正文开始 ----------\n" + cut + "\n---------- 正文结束 ----------\n\n"
+            : "（正文现在是空的）\n\n") +
+      "你能执行的动作只有这五种：\n" +
+      "1. {\"op\":\"set_meta\",\"title\":\"…\",\"excerpt\":\"…\",\"category\":\"…\",\"slug\":\"…\",\"date\":\"YYYY-MM-DD\"} 只写要改的字段\n" +
+      "2. {\"op\":\"append_md\",\"md\":\"## 小节标题\\n\\n正文…\"} 在正文末尾追加一段 Markdown\n" +
+      "3. {\"op\":\"replace_md\",\"md\":\"整篇新的 Markdown\"} 整篇重写，只有大改/润色全文时才用\n" +
+      "4. {\"op\":\"open_post\",\"slug\":\"另一篇的短名\"} 换一篇来改\n" +
+      "5. {\"op\":\"new_post\"} 新建空白草稿\n\n" +
+      "输出格式必须严格遵守：\n" +
+      "- 先用一两句中文说清你打算怎么改；\n" +
+      "- 然后只输出一个 writer-agent 代码块，内容是一个 JSON 对象：\n" +
+      "```writer-agent\n" +
+      "{\"summary\":\"一句话说明\",\"actions\":[{\"op\":\"append_md\",\"md\":\"…\"}]}\n" +
+      "```\n" +
+      "- 除这一个块之外不要输出别的代码块，JSON 里不要写注释；\n" +
+      "- 只动用户要求的那部分，不要顺手删他原来的内容；\n" +
+      "- 不要自己发布、推送、删文章——改完等用户点「应用」。";
+  }
+
+  function parseAgentBlock(text) {
+    var s = String(text || ""), raw = "";
+    var m = s.match(/```(?:writer-agent|writer|agent)\s*\n([\s\S]*?)```/i);
+    if (m) raw = m[1];
+    if (!raw) {
+      var m2 = s.match(/\{[\s\S]*"actions"[\s\S]*\}/);
+      if (m2) raw = m2[0];
+    }
+    if (!raw) return null;
+    raw = raw.trim();
+    try { return JSON.parse(raw); } catch (e) {}
+    try { return JSON.parse(raw.replace(/,\s*([}\]])/g, "$1")); } catch (e) {}
+    return { __bad: true };
+  }
+
+  function humanizeOp(a) {
+    var op = (a && a.op) || "";
+    if (op === "set_meta") {
+      var bits = [];
+      if (a.title) bits.push("标题改成「" + a.title + "」");
+      if (a.excerpt) bits.push("摘要改成「" + String(a.excerpt).slice(0, 24) + "」");
+      if (a.category) bits.push("类别改成「" + a.category + "」");
+      if (a.slug) bits.push("短名改成 " + a.slug);
+      if (a.date) bits.push("日期改成 " + a.date);
+      return bits.length ? bits.join("，") : "元信息（没给具体字段）";
+    }
+    if (op === "append_md") return "末尾追加一段 · " + String(a.md || "").length + " 字符";
+    if (op === "replace_md") return "整篇正文重写 · " + String(a.md || "").length + " 字符";
+    if (op === "open_post") return "打开文章 " + (a.slug || "");
+    if (op === "new_post") return "新建空白草稿";
+    return "不认识的动作：" + op;
+  }
+
+  function buildAgentCard(m) {
+    var plan = parseAgentBlock(m.content);
+    if (!plan) return null;
+    if (plan.__bad) {
+      var bad = document.createElement("div");
+      bad.className = "agent-card";
+      bad.innerHTML = '<div class="hd">Agent 输出的 JSON 没解析成功</div>' +
+        '<div class="ops">可以让它「重新用 writer-agent 格式输出一次」。</div>';
+      return bad;
+    }
+    var acts = Array.isArray(plan.actions) ? plan.actions : [];
+    if (!acts.length) return null;
+
+    var card = document.createElement("div");
+    card.className = "agent-card";
+    var hd = document.createElement("div");
+    hd.className = "hd";
+    hd.textContent = "✎ 准备改这篇文章" + (plan.summary ? " · " + plan.summary : "");
+    card.appendChild(hd);
+
+    var ul = document.createElement("ul");
+    ul.className = "ops";
+    acts.forEach(function (a) {
+      var li = document.createElement("li");
+      li.textContent = humanizeOp(a);
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+
+    var ft = document.createElement("div");
+    ft.className = "ft";
+    var go = document.createElement("button");
+    go.className = "go";
+    go.textContent = "应用到编辑器";
+    var undo = document.createElement("button");
+    undo.textContent = "撤销";
+    undo.hidden = true;
+    var skip = document.createElement("button");
+    skip.textContent = "忽略";
+
+    go.addEventListener("click", function () {
+      var api = window.parent && window.parent.__XI_AGENT;
+      if (!api) { setStatus("只有写作台里的小窗能应用改动", "err"); return; }
+      var res = api.apply(acts);
+      if (!res || !res.ok) {
+        setStatus("应用失败：" + ((res && res.error) || "未知原因"), "err");
+        return;
+      }
+      card.classList.add("done");
+      go.disabled = true;
+      go.textContent = "已应用";
+      skip.hidden = true;
+      undo.hidden = false;
+      setStatus("已应用：" + (res.applied || []).join("，"), "ok");
+      syncAutoRef();
+    });
+    undo.addEventListener("click", function () {
+      var api = window.parent && window.parent.__XI_AGENT;
+      if (api && api.undo()) { undo.hidden = true; go.disabled = false; go.textContent = "再应用一次"; }
+      syncAutoRef();
+    });
+    skip.addEventListener("click", function () {
+      card.classList.add("done");
+      go.disabled = true; skip.disabled = true;
+    });
+
+    ft.appendChild(go); ft.appendChild(undo); ft.appendChild(skip);
+    card.appendChild(ft);
+    return card;
+  }
+
+  function copyText(t) {    if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(t).catch(fallbackCopy);
     } else fallbackCopy();
     function fallbackCopy() {
@@ -892,6 +1097,25 @@
     } catch (e) { return null; }
   }
 
+  /* 自动读取：在写作台小窗里不用手动点「引用文章」，
+     默认就把当前正在写的这篇带上。手动引用优先；点了 × 就不再自动带。 */
+  var autoRefOn = true;
+
+  function syncAutoRef() {
+    if (!isEmbed || !autoRefOn) return;
+    if (attach && !attach.auto) return;          // 手动选的文章不动它
+    var d = writerDraft();
+    if (!d) {
+      if (attach && attach.auto) setAttach(null);
+      return;
+    }
+    var text = d.text, truncated = false;
+    if (text.length > REF_MAX) { text = text.slice(0, REF_MAX); truncated = true; }
+    if (attach && attach.auto && attach.text === text && attach.title === d.title) return;
+    setAttach({ slug: "", title: d.title, meta: "写作台正在写的这一篇",
+                auto: true, text: text, truncated: truncated });
+  }
+
   function refFootText() {
     if (!attach) { el.refFoot.textContent = "选一篇，AI 会读全文再回答"; return; }
     el.refFoot.textContent = "已引用 · " + attach.text.length.toLocaleString() + " 字符" +
@@ -902,7 +1126,7 @@
     attach = a || null;
     if (attach) {
       el.refChip.hidden = false;
-      el.refName.textContent = attach.title;
+      el.refName.textContent = attach.title + (attach.auto ? "（自动）" : "");
       el.refSize.textContent = attach.text.length.toLocaleString() + " 字符";
       el.refBtn.classList.add("on");
     } else {
@@ -949,17 +1173,6 @@
         if (!res.ok) throw new Error(res.error || "请求失败");
         postsCache = res.posts || [];
         postsAt = Date.now();
-        return postsCache;
-      });
-  }
-
-  function loadPosts() {
-    if (postsCache) return Promise.resolve(postsCache);
-    return fetch("/api/posts", { cache: "no-store" })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (!res.ok) throw new Error(res.error || "请求失败");
-        postsCache = res.posts || [];
         return postsCache;
       });
   }
@@ -1112,8 +1325,12 @@
 
     abort = new AbortController();
     var history = [];
-    // 引用的文章放在最前面，每轮都带一次：中途换文章，旧对话也立刻按新文章来
-    if (attach) history.push({ role: "system", content: refPrompt(attach) });
+    // 引用的文章放在最前面，每轮都带一次：中途换文章，旧对话也立刻按新文章来。
+    // Agent 模式下换成「文章 + 可执行动作」的说明，让它能直接动文章。
+    syncAutoRef();
+    var ag = (agentOn && agentReady()) ? agentCtx() : null;
+    if (ag) history.push({ role: "system", content: agentPrompt(ag) });
+    else if (attach) history.push({ role: "system", content: refPrompt(attach) });
     messages.filter(function (m) { return !m.error && (m.content || ""); })
       .forEach(function (m) { history.push({ role: m.role, content: m.content }); });
 
@@ -1188,6 +1405,15 @@
           });
           tools.appendChild(cp);
           node.appendChild(tools);
+
+          // 流式结束后才解析 writer-agent 块：增量渲染时内容还不完整
+          var card = buildAgentCard(aiMsg);
+          if (card) {
+            node.appendChild(card);
+            scrollToBottom();
+          } else if (agentOn) {
+            setStatus("这轮没有可应用的改动（没找到 writer-agent 块）", "err");
+          }
         } else if (!aiMsg.error) {
           aiMsg.error = "模型没有返回任何内容。可能模型名不对，或该模型不支持流式输出。";
           bodyEl.innerHTML = "";
@@ -1276,6 +1502,17 @@
   el.saveBtn.addEventListener("click", saveConfig);
   el.fetchModels.addEventListener("click", fetchModels);
 
+  /* ---- 对话 / Agent ---- */
+  el.modeChat.addEventListener("click", function () { setAgentMode(false); });
+  el.modeAgent.addEventListener("click", function () {
+    if (!agentReady()) {
+      setStatus("Agent 模式要在写作台的 AI 小窗里用（外面没有文章可改）", "err");
+      return;
+    }
+    setAgentMode(true);
+  });
+  el.input.addEventListener("focus", syncAutoRef);
+
   /* ---- 引用文章：按钮开关面板，点外面 / Esc 收起 ---- */
   el.refBtn.addEventListener("click", function (e) {
     e.stopPropagation();
@@ -1345,6 +1582,8 @@
   }
   renderAll();
   autoGrow();
+  if (agentOn) setAgentMode(true);      // 恢复上次的模式（也在里面同步自动引用）
+  else syncAutoRef();
   loadConfig().then(function (res) {
     if (res && res.ok) {
       var c = res.config;

@@ -19,8 +19,12 @@
     "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
-  --mono: "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas,
-    "Liberation Mono", Menlo, monospace;
+  /* 代码字体刻意排在最后用通用 monospace：
+     Cascadia Code / Consolas 这类编程字体的字宽不是「中文字符的 1/2」，
+     一旦代码行里出现中文，缩进和空格就跟普通字符对不齐（实测 Cascadia 0.853、
+     Consolas 0.909，只有通用 monospace 是 1.000），而且它们自带连字会把
+     -> 渲染成箭头、>= 渲染成 ≥。装了更纱黑体（Sarasa Mono）就用它，同样 2:1。 */
+  --mono: "Sarasa Mono SC", "Sarasa Fixed SC", "Noto Sans Mono CJK SC", monospace;
 
   --measure: 42rem;
 }
@@ -38,6 +42,14 @@
     --accent-dim: #8f3f06;
     --code-bg: #f2eee7;
   }
+}
+
+/* 代码里禁止连字：-> 必须是两个字符，不能变成 →；>= 也不能变 ≥。
+   就算系统里只有 Cascadia Code 这类带连字的字体，也不会再串成箭头。 */
+code, pre, kbd, samp, textarea, .mono {
+  font-variant-ligatures: none;
+  font-variant-contextual: none;
+  font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "dlig" 0;
 }
 
 *,

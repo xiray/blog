@@ -147,6 +147,11 @@
     max-width: 44rem; margin: 0 auto; min-height: 60vh; outline: none;
     font-size: 1.0625rem; line-height: 1.8;
   }
+  /* 代码块统一：等宽、无连字、tab 按 4 格算（跟 VS Code 默认一致） */
+  #richEditor pre, #mdPreview pre, #richEditor code, #mdPreview code {
+    font-family: var(--mono); tab-size: 4;
+    font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+  }
   #richEditor:empty::before {
     content: attr(data-ph); color: var(--muted); opacity: .6; pointer-events: none;
     font-family: var(--sans); font-size: .9375rem;
@@ -156,8 +161,11 @@
   #mdWrap.show { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   #mdEditor {
     min-height: 0; width: 100%; resize: none; border: none; outline: none;
-    background: var(--bg); color: var(--text-dim); font-family: var(--sans);
-    font-size: 1rem; line-height: 1.8; padding: 1.25rem 1.5rem 4rem; tab-size: 2;
+    /* Markdown 源码按代码编辑器的手感来：等宽 + 关掉连字 + tab 4，
+       这样空格/缩进跟 VS Code 里看起来一致（中文恰好占两格） */
+    background: var(--bg); color: var(--text-dim); font-family: var(--mono);
+    font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;
+    font-size: .9375rem; line-height: 1.75; padding: 1.25rem 1.5rem 4rem; tab-size: 4;
     border-right: 1px solid var(--line-soft);
   }
   #mdPreview { overflow-y: auto; padding: 1.25rem 1.75rem 4rem; }
@@ -299,6 +307,18 @@
     font-size: .6875rem; color: var(--muted); white-space: nowrap;
   }
   .tbl-hint b { color: var(--accent); font-weight: 600; }
+
+  /* 拖文件进来时的整屏提示 */
+  .drop-mask {
+    position: fixed; inset: 0; display: none; place-items: center; z-index: 90;
+    background: rgba(10, 12, 15, .62); pointer-events: none; text-align: center;
+  }
+  .drop-mask.on { display: grid; }
+  .drop-mask b { display: block; font-size: 1.15rem; color: #fff; }
+  .drop-mask span { display: block; margin-top: .45rem; font-size: .8125rem; color: #c8ccd4; }
+
+  /* 代理探测不通时的提示色 */
+  .ghost.warn { color: #e0795f; border-color: rgba(224, 121, 95, .55); }
 </style>
 </head>
 <body>
@@ -314,7 +334,10 @@
         <button id="modeMd">Markdown</button>
       </div>
       <button class="ghost" id="newBtn">新建</button>
+      <button class="ghost" id="importBtn" title="导入本地 .md 文件（也可以直接把文件拖进来）">导入 md</button>
+      <input type="file" id="mdPicker" accept=".md,.markdown,.txt" hidden>
       <button class="ghost" id="aiBtn" title="AI 小窗（Shift+点击另开整页）">AI 问答</button>
+      <button class="ghost" id="proxyBtn" title="点一下在「走代理」和「直连」之间切换">代理</button>
       <button class="ghost" id="syncBtn" title="把本地改动一次性推到 GitHub">更新<span class="badge" id="syncBadge" hidden></span></button>
       <button class="primary" id="pubBtn">发布</button>
     </div>
@@ -456,7 +479,8 @@
     modeRich: $("modeRich"), modeMd: $("modeMd"),
     fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
     filePicker: $("filePicker"), imagePicker: $("imagePicker"),
-    tblPop: $("tblPop"), tblGrid: $("tblGrid"), tblCount: $("tblCount")
+    tblPop: $("tblPop"), tblGrid: $("tblGrid"), tblCount: $("tblCount"),
+    importBtn: $("importBtn"), mdPicker: $("mdPicker"), proxyBtn: $("proxyBtn")
   };
 
   var STORE = "xiray-writer-v2";
@@ -2439,6 +2463,14 @@
   el.pubBtn.addEventListener("click", publish);
   el.newBtn.addEventListener("click", newPost);
   el.newBtn2.addEventListener("click", newPost);
+  el.importBtn.addEventListener("click", function () { el.mdPicker.click(); });
+  el.mdPicker.addEventListener("change", function () {
+    var f = el.mdPicker.files && el.mdPicker.files[0];
+    el.mdPicker.value = "";
+    importMarkdown(f);
+  });
+  el.proxyBtn.addEventListener("click", toggleProxy);
+  bindDrop();
   el.aiBtn.addEventListener("click", onAiBtn);
   el.syncBtn.addEventListener("click", syncNow);
   el.modeRich.addEventListener("click", function () { setMode("rich"); });
@@ -2451,6 +2483,303 @@
     }
   });
 
+  /* ============================================ 导入本地 Markdown */
+
+  function fmSplit(text) {
+    // 支持 --- front matter ---：title / date / category / excerpt / slug / tags
+    var m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (!m) return { meta: {}, body: text };
+    var meta = {};
+    m[1].split(/\r?\n/).forEach(function (line) {
+      var kv = line.match(/^\s*([A-Za-z_-]+)\s*:\s*(.*)$/);
+      if (!kv) return;
+      meta[kv[1].toLowerCase()] = kv[2].trim().replace(/^["']|["']$/g, "");
+    });
+    return { meta: meta, body: String(text).slice(m[0].length) };
+  }
+
+  function firstPara(md) {
+    var blocks = String(md || "").split(/\n{2,}/);
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i].trim();
+      if (!b || /^#{1,6}\s/.test(b) || /^```/.test(b) || /^[-*]\s/.test(b)) continue;
+      return b.replace(/[`*_>#]/g, "").replace(/\s+/g, " ").slice(0, 90);
+    }
+    return "";
+  }
+
+  function importMarkdown(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setStatus("文件太大（超过 5MB），先拆一下", "err"); return; }
+    var dirty = !!(currentSlug || el.title.value.trim() ||
+                   el.rich.textContent.trim() || el.md.value.trim());
+    if (dirty && !confirm("导入会覆盖当前编辑区的内容，继续？")) return;
+    var fr = new FileReader();
+    fr.onerror = function () { setStatus("读文件失败", "err"); };
+    fr.onload = function () { applyMarkdown(String(fr.result || ""), file.name); };
+    fr.readAsText(file, "utf-8");
+  }
+
+  function applyMarkdown(text, filename) {
+    var split = fmSplit(text);
+    var meta = split.meta, body = split.body.replace(/\r\n/g, "\n");
+
+    var title = meta.title || "";
+    var lines = body.split("\n");
+    if (!title) {
+      for (var i = 0; i < lines.length && i < 40; i++) {
+        var hm = lines[i].match(/^\s{0,3}#\s+(.+?)\s*#*\s*$/);
+        if (hm) { title = hm[1].trim(); lines.splice(i, 1); break; }
+      }
+      body = lines.join("\n");
+    }
+    var stem = String(filename || "").replace(/\.[^.]+$/, "");
+    if (!title) title = stem || "未命名";
+
+    currentSlug = "";
+    slugTouched = false;
+    // 先切模式：setMode("md") 会拿富文本内容去覆盖 mdEditor，
+    // 必须等它做完再把文件内容写进去，不然刚导入的正文会被空编辑器冲掉。
+    setMode("md");
+    el.title.value = title;
+    el.md.value = body.replace(/^\n+/, "");
+    el.date.value = /^\d{4}-\d{2}-\d{2}$/.test(meta.date || "") ? meta.date : todayStr();
+    el.excerpt.value = meta.excerpt || meta.description || firstPara(body);
+    el.slug.value = (meta.slug && /^[a-z0-9][a-z0-9-]*$/.test(meta.slug))
+      ? meta.slug
+      : (slugifyAscii(stem) || autoSlug(title));
+
+    if (meta.category) {
+      if (![].some.call(el.category.options, function (o) { return o.value === meta.category; })) {
+        fetch("/api/categories", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "add", name: meta.category })
+        }).then(function () { loadCategories(); 
+          setTimeout(function () { el.category.value = meta.category; }, 300);
+        }).catch(function () {});
+      } else {
+        el.category.value = meta.category;
+      }
+    }
+
+    setMode("md");
+    renderMdPreview();
+    saveDraft();
+
+    var localImgs = (body.match(/!\[[^\]]*\]\(([^)\s]+)/g) || []).length;
+    var remote = (body.match(/!\[[^\]]*\]\((https?:)/g) || []).length;
+    setStatus("已导入「" + filename + "」· " + body.length + " 字符" +
+      (meta.title ? "（含 front matter）" : "") +
+      (localImgs - remote > 0 ? " · 有 " + (localImgs - remote) + " 张本地图片要手动传" : ""), "ok");
+  }
+
+  function slugifyAscii(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "").slice(0, 48);
+  }
+
+  /* 拖文件进来：.md 直接导入，图片走上传流程（和工具栏图片按钮同一条路） */
+  function bindDrop() {
+    var zone = document.querySelector(".main");
+    if (!zone) return;
+    var mask = document.createElement("div");
+    mask.className = "drop-mask";
+    mask.innerHTML = "<b>松手导入</b><span>.md / .markdown 进正文，图片直接上传插入</span>";
+    document.querySelector(".app").appendChild(mask);
+
+    var depth = 0;
+    function hasFiles(e) {
+      var dt = e.dataTransfer;
+      if (!dt) return false;
+      return !!(dt.types && Array.prototype.indexOf.call(dt.types, "Files") >= 0);
+    }
+    zone.addEventListener("dragenter", function (e) {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); depth++; mask.classList.add("on");
+    });
+    zone.addEventListener("dragover", function (e) { if (hasFiles(e)) e.preventDefault(); });
+    zone.addEventListener("dragleave", function () { if (--depth <= 0) { depth = 0; mask.classList.remove("on"); } });
+    zone.addEventListener("drop", function (e) {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); depth = 0; mask.classList.remove("on");
+      var files = Array.prototype.slice.call(e.dataTransfer.files || []);
+      var mds = files.filter(function (f) { return /\.(md|markdown|txt)$/i.test(f.name); });
+      var imgs = files.filter(function (f) { return /^image\//.test(f.type); });
+      if (mds.length) { importMarkdown(mds[0]); return; }
+      if (imgs.length && typeof uploadFile === "function") {
+        imgs.forEach(function (f) { uploadFile(f, true); });
+      }
+    });
+  }
+
+  /* ============================================ 代理开关（7897 / 直连） */
+
+  var proxyState = null;
+
+  function paintProxy(st) {
+    if (!st) return;
+    proxyState = st;
+    var on = st.mode === "proxy";
+    el.proxyBtn.textContent = on ? "代理 " + String(st.url || "").replace(/^https?:\/\//, "") : "直连";
+    el.proxyBtn.title = (on ? "走代理 " + st.url : "不走代理，直接连") +
+      (st.ok === false ? "（刚才探测不通，推送时会自动降级直连）" : "") + "\n点一下切换";
+    el.proxyBtn.classList.toggle("warn", st.ok === false);
+  }
+
+  function refreshProxy() {
+    fetch("/api/proxy", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (res && res.ok) paintProxy(res.status); })
+      .catch(function () {});
+  }
+
+  function toggleProxy() {
+    var next = (proxyState && proxyState.mode === "proxy") ? "off" : "proxy";
+    el.proxyBtn.disabled = true;
+    fetch("/api/proxy", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: next })
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        el.proxyBtn.disabled = false;
+        if (!res.ok) { setStatus("切换失败：" + (res.error || ""), "err"); return; }
+        paintProxy(res.status);
+        setStatus(next === "off" ? "已改成直连（不走代理）"
+          : "已改成走代理 " + res.config.url, "ok");
+      })
+      .catch(function () { el.proxyBtn.disabled = false; setStatus("切换失败：连不上本地服务", "err"); });
+  }
+
+  /* ============================================ Agent 桥（给小窗里的 AI 用）
+     AI 输出 ```writer-agent {json}``` 块，这里负责把动作落到编辑器上。
+     应用前先拍快照，「撤销」能回到应用之前。 */
+
+  var agentSnap = null;
+
+  function agentContext() {
+    return {
+      title: el.title.value, slug: el.slug.value, excerpt: el.excerpt.value,
+      category: el.category.value === "__new__" ? "" : el.category.value,
+      date: el.date.value, mode: mode,
+      text: mode === "rich" ? (el.rich.innerText || "") : el.md.value,
+      html: mode === "rich" ? el.rich.innerHTML : "",
+      md: mode === "md" ? el.md.value : ""
+    };
+  }
+
+  function agentSnapshot() {
+    return {
+      title: el.title.value, excerpt: el.excerpt.value, category: el.category.value,
+      slug: el.slug.value, date: el.date.value, mode: mode,
+      rich: el.rich.innerHTML, md: el.md.value, slugTouched: slugTouched,
+      catRaw: el.category.value
+    };
+  }
+
+  function agentRestore(s) {
+    if (!s) return false;
+    el.title.value = s.title; el.excerpt.value = s.excerpt;
+    el.date.value = s.date; el.slug.value = s.slug;
+    el.rich.innerHTML = s.rich; el.md.value = s.md;
+    slugTouched = s.slugTouched;
+    setMode(s.mode || "rich");
+    if (el.category.value !== s.catRaw) {
+      window.__pendingCat = s.catRaw;
+      loadCategories();
+      setTimeout(function () { el.category.value = s.catRaw; }, 300);
+    }
+    ensureChips(); renderMdPreview(); saveDraft();
+    return true;
+  }
+
+  function appendHtml(html) {
+    if (mode === "md") {
+      el.md.value = el.md.value.replace(/\s*$/, "") + "\n\n" + htmlToMd(html) + "\n";
+      renderMdPreview();
+      return;
+    }
+    var box = document.createElement("div");
+    box.innerHTML = html;
+    sanitize(box, { fmt: true });
+    while (box.firstChild) el.rich.appendChild(box.firstChild);
+    ensureChips();
+  }
+
+  function replaceBody(html) {
+    if (mode === "md") {
+      el.md.value = htmlToMd(html) + "\n";
+      renderMdPreview();
+      return;
+    }
+    var box = document.createElement("div");
+    box.innerHTML = html;
+    sanitize(box, { fmt: true });
+    el.rich.innerHTML = "";
+    while (box.firstChild) el.rich.appendChild(box.firstChild);
+    ensureChips();
+  }
+
+  function applyAgent(actions) {
+    if (!Array.isArray(actions) || !actions.length) {
+      return { ok: false, error: "没有可执行的动作" };
+    }
+    agentSnap = agentSnapshot();
+    var done = [];
+    try {
+      actions.forEach(function (a) {
+        var op = (a && a.op) || "";
+        if (op === "set_meta") {
+          var changed = [];
+          ["title", "excerpt", "date", "slug"].forEach(function (k) {
+            if (typeof a[k] === "string" && a[k].trim() !== "") {
+              el[k].value = k === "slug" ? slugifyAscii(a[k]) || el[k].value : a[k].trim();
+              if (k === "slug") { slugTouched = true; changed.push("短名"); }
+              else if (k === "title") changed.push("标题");
+              else if (k === "excerpt") changed.push("摘要");
+              else changed.push("日期");
+            }
+          });
+          if (typeof a.category === "string" && a.category.trim()) {
+            var want = a.category.trim();
+            window.__pendingCat = want;
+            loadCategories();
+            setTimeout(function () { el.category.value = want; saveDraft(); }, 350);
+            changed.push("类别");
+          }
+          if (changed.length) done.push("改了" + changed.join("/"));
+        } else if (op === "append_md") {
+          if (a.md) { appendHtml(mdToHtml(a.md)); done.push("追加一段（" + a.md.length + " 字符）"); }
+        } else if (op === "replace_md") {
+          if (a.md) { replaceBody(mdToHtml(a.md)); done.push("整篇正文重写（" + a.md.length + " 字符）"); }
+        } else if (op === "open_post") {
+          if (a.slug) { openPost(String(a.slug)); done.push("打开《" + a.slug + "》"); }
+        } else if (op === "new_post") {
+          newPost(); done.push("新建草稿");
+        } else {
+          done.push("跳过不认识的 " + op);
+        }
+      });
+    } catch (e) {
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+    if (mode === "md") renderMdPreview();
+    saveDraft();
+    setStatus("AI 已改：" + done.join("，") + " · 可以「撤销」", "ok");
+    return { ok: true, applied: done };
+  }
+
+  window.__XI_AGENT = {
+    context: agentContext,
+    apply: applyAgent,
+    canUndo: function () { return !!agentSnap; },
+    undo: function () {
+      var ok = agentRestore(agentSnap);
+      agentSnap = null;
+      if (ok) setStatus("已撤销 AI 的改动", "ok");
+      return ok;
+    }
+  };
+
   /* ============================================ 启动 */
 
   loadCategories();
@@ -2460,6 +2789,7 @@
   renderMdPreview();
   loadPosts();
   refreshSync();
+  refreshProxy();
   window.addEventListener("focus", refreshSync);
   setStatus(had ? "已恢复上次未发布的内容" : "就绪");
 

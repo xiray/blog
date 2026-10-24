@@ -12,3 +12,5 @@ __pycache__/
 
 # 本地 AI 配置（含 API Key，绝不提交）
 tools/.ai-config.json
+# 本机代理设置（每台机器不一样，不提交）
+tools/.proxy.json

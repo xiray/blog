@@ -96,10 +96,13 @@ def clear_progress():
     set_progress("", "")
 
 
-# ================================================================ 代理探测
+# ================================================================ 代理
+# 只认两种状态：用固定代理（默认 ray 一直在用的 7897）或者不用代理。
+# 以前会在十几个常见端口上乱探，探到谁算谁，结果经常挑到一个半死不活的端口，
+# 推送卡住、AI 报 502，看着像网络问题其实是选错了代理。
 
-COMMON_PORTS = [7897, 7890, 7891, 10809, 10808, 1080, 8889, 64836, 33210, 2080, 4780]
-_proxy_cache = {"value": "unknown", "at": 0.0}
+PROXY_FILE = os.path.join(TOOLS, ".proxy.json")
+DEFAULT_PROXY = "http://127.0.0.1:7897"
 
 
 def _normalize(p):
@@ -111,52 +114,32 @@ def _normalize(p):
     return p
 
 
-def proxy_candidates():
-    found = []
+def load_proxy_mode():
+    raw = read_json(PROXY_FILE, None)
+    if isinstance(raw, dict) and raw.get("mode") in ("proxy", "off"):
+        return {"mode": raw["mode"], "url": _normalize(raw.get("url")) or DEFAULT_PROXY}
+    return {"mode": "proxy", "url": DEFAULT_PROXY}
 
-    def add(p):
-        p = _normalize(p)
-        if p and p not in found:
-            found.append(p)
 
-    for key in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
-                "ALL_PROXY", "all_proxy"):
-        add(os.environ.get(key))
+def save_proxy_mode(payload):
+    cur = load_proxy_mode()
+    mode = "off" if (payload.get("mode") or "").strip() == "off" else "proxy"
+    url = _normalize(payload.get("url")) or cur["url"] or DEFAULT_PROXY
+    if not re.match(r"^https?://", url):
+        raise ValueError("代理地址要以 http:// 开头，比如 http://127.0.0.1:7897")
+    data = {"mode": mode, "url": url, "updated": time.strftime("%Y-%m-%d %H:%M:%S")}
+    write_json(PROXY_FILE, data)
+    _proxy_cache.update({"at": 0.0, "ok": None})
+    return data
 
-    if winreg:
-        try:
-            key = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
-            )
-            try:
-                try:
-                    enabled = winreg.QueryValueEx(key, "ProxyEnable")[0]
-                except OSError:
-                    enabled = 0
-                if enabled:
-                    try:
-                        server = winreg.QueryValueEx(key, "ProxyServer")[0]
-                    except OSError:
-                        server = ""
-                    if server:
-                        if "=" in server:
-                            for part in server.split(";"):
-                                if "=" in part:
-                                    add(part.split("=", 1)[1])
-                        else:
-                            add(server)
-                            for scheme in ("http", "https"):
-                                add("%s://%s" % (scheme, server))
-            finally:
-                winreg.CloseKey(key)
-        except Exception:
-            pass
 
-    for port in COMMON_PORTS:
-        add("http://127.0.0.1:%d" % port)
+def proxy_url():
+    """当前该用的代理；返回 None 表示直连。"""
+    m = load_proxy_mode()
+    return m["url"] if m["mode"] == "proxy" else None
 
-    return found
+
+_proxy_cache = {"at": 0.0, "ok": None}
 
 
 def _probe(url, proxy=None, timeout=6):
@@ -174,34 +157,28 @@ def _probe(url, proxy=None, timeout=6):
         return False
 
 
-def find_proxy(force=False):
+def proxy_status(force=False):
+    """界面上的小状态：当前用的是哪个代理、通不通。"""
+    m = load_proxy_mode()
     now = time.time()
-    if not force and _proxy_cache["value"] != "unknown" and now - _proxy_cache["at"] < 120:
-        return _proxy_cache["value"]
+    if not force and _proxy_cache["ok"] is not None and now - _proxy_cache["at"] < 60:
+        ok = _proxy_cache["ok"]
+    else:
+        ok = _probe("https://github.com/login", proxy_url(), timeout=5)
+        _proxy_cache.update({"at": now, "ok": ok})
+    m["ok"] = ok
+    m["effective"] = m["url"] if m["mode"] == "proxy" else "直连"
+    return m
 
-    cands = proxy_candidates()
-    verdict = {}
 
-    def work(p):
-        verdict[p] = _probe("https://github.com/login", p)
-
-    threads = [threading.Thread(target=work, args=(p,), daemon=True) for p in cands]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=8)
-
-    picked = None
-    for p in cands:
-        if verdict.get(p):
-            picked = p
-            break
-    if picked is None and _probe("https://github.com/login"):
-        picked = None  # 直连可用
-
-    _proxy_cache["value"] = picked
-    _proxy_cache["at"] = now
-    return picked
+def find_proxy(force=False):
+    """兼容旧调用点：返回可用代理地址，None = 直连。"""
+    url = proxy_url()
+    if not url:
+        return None
+    if force or _proxy_cache["ok"] is None:
+        proxy_status(force=True)
+    return url if _proxy_cache["ok"] is not False else None
 
 
 # ================================================================ git
@@ -237,20 +214,23 @@ def git_commit(message):
 
 
 def git_push():
+    """推送。用配置里的代理（默认 7897）试三次，最后一次改成直连兜底。
+
+    以前每次尝试都会重新探测代理，探测本身又要几秒，还会把「其实直连就行」
+    的情况拖成半分钟。现在代理地址是定死的，失败只降级到直连。
+    """
+    proxy = proxy_url()
+    plans = [proxy, proxy, None] if proxy else [None]
     last = ""
-    for attempt in range(3):
-        proxy = find_proxy(force=(attempt > 0))
+    for i, p in enumerate(plans):
         set_progress("推送", "第 %d 次尝试%s" % (
-            attempt + 1, ("（代理 " + proxy + "）") if proxy else "（直连）"))
-        if proxy:
-            cfg = ["-c", "http.proxy=" + proxy, "-c", "https.proxy=" + proxy]
-        else:
-            cfg = ["-c", "http.proxy=", "-c", "https.proxy="]
+            i + 1, ("（代理 " + p.replace("http://", "") + "）") if p else "（直连）"))
+        cfg = ["-c", "http.proxy=" + (p or ""), "-c", "https.proxy=" + (p or "")]
         code, out, err = run_git(cfg + ["push"], timeout=150)
         if code == 0:
-            return True, ("经由 " + proxy) if proxy else "直连", out.strip()
+            return True, ("经由 " + p) if p else "直连", out.strip()
         last = (err or out).strip()
-        time.sleep(2)
+        time.sleep(1)
     return False, "", last[:500]
 
 
@@ -801,26 +781,16 @@ def _is_local_url(u):
 
 
 def ai_routes(cfg):
-    """(标签, ProxyHandler)。先直连，再系统代理，最后才去探测——探测要几秒，别每次都跑。"""
+    """(标签, ProxyHandler)。先直连——API 大多在国内，绕代理反而更容易 502；
+    直连不通再试设置里那个代理（跟 git push 用的是同一个）。"""
     if _is_local_url(cfg["base_url"]):
         # 本机地址走代理毫无意义，只会把「连接被拒」变成看不懂的 502
         yield "直连", urllib.request.ProxyHandler({})
         return
 
-    seen = []
     yield "直连", urllib.request.ProxyHandler({})
-    try:
-        sys_proxy = urllib.request.getproxies()
-    except Exception:
-        sys_proxy = {}
-    if sys_proxy:
-        seen.append("sys")
-        yield "系统代理", urllib.request.ProxyHandler()
-    try:
-        p = find_proxy()
-    except Exception:
-        p = None
-    if p and "sys" not in seen:
+    p = proxy_url()
+    if p:
         yield "代理 " + p.replace("http://", ""), \
             urllib.request.ProxyHandler({"http": p, "https": p})
 
@@ -1062,6 +1032,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/progress":
             return self._json({"ok": True, "progress": get_progress()})
 
+        if path == "/api/proxy":
+            return self._json({"ok": True, "status": proxy_status()})
+
         if path == "/api/sync":
             return self._json({"ok": True, "changes": local_changes()})
 
@@ -1106,7 +1079,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/categories":
                 return self._json(self._handle_categories(payload))
             if path == "/api/proxy":
-                return self._json({"ok": True, "proxy": find_proxy(force=True) or "直连"})
+                return self._json({"ok": True,
+                                   "config": save_proxy_mode(payload),
+                                   "status": proxy_status(force=True)})
             if path == "/api/ai/config":
                 return self._json({"ok": True, "config": save_ai_config(payload)})
             if path == "/api/ai/models":
@@ -1217,8 +1192,8 @@ def probe_running():
 
 def main():
     if "--sync" in sys.argv:
-        p = find_proxy(force=True)
-        print("代理: %s" % (p or "直连"))
+        st = proxy_status(force=True)
+        print("代理: %s%s" % (st["effective"], "" if st.get("ok") else "（探测不通，会降级直连）"))
         res = sync_repo("update: 手动更新")
         if res.get("ok"):
             print("推送成功（%s）" % res.get("via"))
