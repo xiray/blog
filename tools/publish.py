@@ -296,6 +296,160 @@ def sync_all(message=""):
     return res
 
 
+# ================================================================ 从 GitHub 拉取
+
+def _git_cfg(proxy):
+    return ["-c", "http.proxy=" + (proxy or ""), "-c", "https.proxy=" + (proxy or "")]
+
+
+def _net_plans():
+    """代理优先，直连兜底。跟推送用的是同一套代理配置。"""
+    p = proxy_url()
+    return [p, None] if p else [None]
+
+
+def _rev_count(rev):
+    code, out, _ = run_git(["rev-list", "--count", rev])
+    try:
+        return int((out or "0").strip())
+    except ValueError:
+        return 0
+
+
+def git_fetch():
+    last = ""
+    for i, p in enumerate(_net_plans()):
+        set_progress("拉取", "连接 GitHub 第 %d 次%s" % (
+            i + 1, ("（代理 " + p.replace("http://", "") + "）") if p else "（直连）"))
+        code, out, err = run_git(_git_cfg(p) + ["fetch", "origin", "--prune"], timeout=150)
+        if code == 0:
+            return True, p, (out + err).strip()
+        last = (err or out).strip()
+        time.sleep(1)
+    return False, None, last[:400]
+
+
+def git_pull():
+    """「拉取」：把 GitHub 上的新内容同步到本地。
+
+    只做快进（--ff-only），永远不覆盖本地改动：
+    本地有没提交的文件、或有没推上去的提交，就直接拒绝并提示先点「更新」，
+    免得一次 pull 把写了一半的东西盖掉、或者搞出冲突来。
+    """
+    ok, via, detail = git_fetch()
+    if not ok:
+        return {"ok": False, "stage": "fetch", "error": detail or "连不上 GitHub",
+                "message": "连不上 GitHub，先看看代理是不是开着"}
+
+    behind = _rev_count("HEAD..@{u}")
+    ahead = _rev_count("@{u}..HEAD")
+    if not behind:
+        return {"ok": True, "noop": True, "behind": 0, "ahead": ahead, "via": via,
+                "message": "已经是最新的，GitHub 上没有更新的内容"}
+
+    ch = local_changes()
+    if ch["count"]:
+        return {"ok": False, "stage": "dirty", "behind": behind, "ahead": ahead,
+                "files": ch["files"][:20],
+                "message": "本地还有 %d 个文件没推上去，先点「更新」再拉取" % ch["count"]}
+    if ahead:
+        return {"ok": False, "stage": "diverged", "behind": behind, "ahead": ahead,
+                "message": "本地有 %d 个提交还没推上去，先点「更新」" % ahead}
+
+    old = (run_git(["rev-parse", "HEAD"])[1] or "").strip()
+    set_progress("拉取", "快进 %d 个提交" % behind)
+    code, out, err = run_git(["merge", "--ff-only", "@{u}"], timeout=120)
+    if code != 0:
+        return {"ok": False, "stage": "merge", "error": (out + err).strip()[:400],
+                "message": "快进失败，可能有文件被别的程序占着"}
+    new = (run_git(["rev-parse", "HEAD"])[1] or "").strip()
+    _, names, _ = run_git(["diff", "--name-only", old, new])
+    files = [f.strip() for f in (names or "").splitlines() if f.strip()]
+    return {"ok": True, "behind": behind, "ahead": 0, "via": via,
+            "from": old[:7], "to": new[:7], "count": len(files), "files": files[:40],
+            "message": "已拉取 %d 个提交，%d 个文件有变化" % (behind, len(files))}
+
+
+# ================================================================ 历史里被删掉的文章
+
+def deleted_posts():
+    """git 历史里删掉、磁盘上已经没有的文章，用来把误删的找回来。
+
+    同一篇被删过多次的只留最近那一次；磁盘上还在的跳过。
+    """
+    code, out, _ = run_git(["log", "--diff-filter=D", "--name-only",
+                            "--pretty=format:@@%h|%ad", "--date=short",
+                            "--", "posts/"])
+    if code != 0:
+        return []
+
+    cur, found = None, {}
+    for raw in (out or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("@@"):
+            h, _, d = line[2:].partition("|")
+            cur = (h.strip(), d.strip())
+            continue
+        if not cur or not line.startswith("posts/") or not line.endswith(".html"):
+            continue
+        slug = os.path.basename(line)[:-5]
+        if slug in found:
+            continue
+        if os.path.exists(os.path.join(POSTS, slug + ".html")):
+            continue
+        found[slug] = {"slug": slug, "commit": cur[0], "deleted": cur[1]}
+
+    posts = []
+    for slug, info in found.items():
+        _, blob, _ = run_git(["show", "%s^:posts/%s.html" % (info["commit"], slug)])
+        m = re.search(r"<h1[^>]*>(.*?)</h1>", blob or "", re.S)
+        info["title"] = strip_html(m.group(1)) if m else slug
+        posts.append(info)
+    posts.sort(key=lambda x: (x["deleted"], x["slug"]), reverse=True)
+    return posts
+
+
+def restore_post(slug):
+    """把历史里删掉的文章恢复回磁盘（html + 写作台的源 json）。"""
+    if not re.match(r"^[a-z0-9][a-z0-9-]*$", slug or ""):
+        raise ValueError("短名不合法")
+    target = os.path.join(POSTS, slug + ".html")
+    if os.path.exists(target):
+        return {"ok": False, "error": "这篇文章还在，不用恢复"}
+
+    item = next((p for p in deleted_posts() if p["slug"] == slug), None)
+    if not item:
+        return {"ok": False, "error": "git 历史里找不到这篇"}
+
+    rev = "%s^:posts/%s.html" % (item["commit"], slug)
+    code, blob, err = run_git(["show", rev])
+    if code != 0 or not (blob or "").strip():
+        return {"ok": False, "error": "取历史内容失败：%s" % (err or "")[:200]}
+
+    with open(target, "w", encoding="utf-8", newline="\n") as f:
+        f.write(blob.replace("\r\n", "\n"))
+
+    # 源码 json 也一起还原，否则写作台打开它是空的
+    src = src_path(slug)
+    if not os.path.exists(src):
+        c2, sblob, _ = run_git(["show", "%s^:tools/sources/%s.json" % (item["commit"], slug)])
+        if c2 == 0 and (sblob or "").strip():
+            try:
+                data = json.loads(sblob)
+            except Exception:
+                data = None
+            if isinstance(data, dict):
+                write_source(slug, data)
+
+    set_progress("恢复", "重建首页列表与搜索索引")
+    rebuild_index_list()
+    rebuild_search_index()
+    return {"ok": True, "slug": slug, "title": item.get("title"),
+            "message": "已恢复《%s》，记得点「更新」推上线" % item.get("title")}
+
+
 # ================================================================ 基础工具
 
 def ensure_dirs():
@@ -1038,6 +1192,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sync":
             return self._json({"ok": True, "changes": local_changes()})
 
+        if path == "/api/deleted":
+            return self._json({"ok": True, "posts": deleted_posts()})
+
         return self._serve_static(path)
 
     def _serve_static(self, path):
@@ -1072,6 +1229,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(delete_post(payload.get("slug", "")))
             if path == "/api/sync":
                 return self._json(sync_all(payload.get("message") or ""))
+            if path == "/api/pull":
+                return self._json(git_pull())
+            if path == "/api/restore":
+                return self._json(restore_post(payload.get("slug", "")))
             if path == "/api/upload":
                 return self._json({"ok": True,
                                    "file": save_upload(payload.get("filename"),

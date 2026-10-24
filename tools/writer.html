@@ -83,7 +83,54 @@
   .post-items .pi-del:hover { color: #ff8f8f; background: rgba(255,90,90,.12); }
   .side-foot { flex: 0 0 auto; padding: .5rem .4rem .75rem; border-top: 1px solid var(--line-soft); }
   .side-foot button { width: 100%; border: 1px dashed var(--line); font-size: .8125rem; }
+  .side-foot button.restore { margin-top: .4rem; border-style: solid; color: var(--muted); font-size: .75rem; }
+  .side-foot button.restore:hover { color: var(--accent); border-color: var(--accent); }
   .side-empty { padding: 1rem .9rem; font-size: .75rem; color: var(--muted); }
+
+  /* 侧栏「拉取」：比正文小一号，别抢「更新/发布」的注意力 */
+  .side-tools { display: flex; align-items: center; gap: .45rem; }
+  .side-tools .mini {
+    padding: .1rem .45rem; font-size: .6875rem; letter-spacing: .04em;
+    text-transform: none; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 4px; line-height: 1.5;
+  }
+  .side-tools .mini:hover { color: var(--accent); border-color: var(--accent); }
+  .side-tools .mini[disabled] { opacity: .5; cursor: default; }
+
+  /* 找回已删文章的浮层 */
+  .restore-pop {
+    position: fixed; z-index: 95; width: 21rem; max-height: 20rem; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.45); padding: .45rem;
+  }
+  .restore-pop[hidden] { display: none; }
+  .restore-pop .rp-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: .2rem .35rem .45rem; font-size: .6875rem; color: var(--muted);
+    letter-spacing: .08em;
+  }
+  .restore-pop .rp-item {
+    display: flex; align-items: center; gap: .5rem; padding: .45rem .35rem;
+    border-radius: 5px;
+  }
+  .restore-pop .rp-item:hover { background: var(--bg); }
+  .restore-pop .rp-title {
+    flex: 1 1 auto; min-width: 0; font-size: .8125rem; color: var(--text-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .restore-pop .rp-date {
+    flex: 0 0 auto; font-family: var(--mono); font-size: .625rem; color: var(--muted);
+  }
+  .restore-pop .rp-go {
+    flex: 0 0 auto; padding: .15rem .5rem; font-size: .6875rem;
+    border: 1px solid var(--line); border-radius: 4px; color: var(--accent);
+  }
+  .restore-pop .rp-go:hover { border-color: var(--accent); }
+  .restore-pop .rp-close {
+    padding: 0 .2rem; font-size: .75rem; color: var(--muted); background: none;
+    border: none; line-height: 1;
+  }
+  .restore-pop .rp-close:hover { color: var(--text); }
 
   /* ---- 右侧 ---- */
   .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
@@ -346,9 +393,18 @@
   <div class="body">
 
     <aside class="side">
-      <div class="side-head"><span>文章</span><span id="postCount"></span></div>
+      <div class="side-head">
+        <span>文章</span>
+        <span class="side-tools">
+          <span id="postCount"></span>
+          <button class="mini" id="pullBtn" title="从 GitHub 拉取最新内容（只快进，不会覆盖本地没推上去的改动）">拉取</button>
+        </span>
+      </div>
       <ul class="post-items" id="postItems"></ul>
-      <div class="side-foot"><button id="newBtn2">＋ 新建文章</button></div>
+      <div class="side-foot">
+        <button id="newBtn2">＋ 新建文章</button>
+        <button id="restoreBtn" class="restore" hidden>从历史找回<span id="restoreCount"></span></button>
+      </div>
     </aside>
 
     <section class="main">
@@ -458,6 +514,11 @@
   <div class="tbl-hint"><b id="tblCount">3 × 3</b> · 点一下确定</div>
 </div>
 
+<div class="restore-pop" id="restorePop" hidden>
+  <div class="rp-head"><span>git 历史里被删掉的文章</span><button class="rp-close" id="restoreClose">✕</button></div>
+  <div id="restoreList"></div>
+</div>
+
 <input type="file" id="filePicker" style="display:none">
 <input type="file" id="imagePicker" accept="image/*" style="display:none">
 
@@ -480,7 +541,9 @@
     fgColor: $("fgColor"), bgColor: $("bgColor"), fgSwatch: $("fgSwatch"),
     filePicker: $("filePicker"), imagePicker: $("imagePicker"),
     tblPop: $("tblPop"), tblGrid: $("tblGrid"), tblCount: $("tblCount"),
-    importBtn: $("importBtn"), mdPicker: $("mdPicker"), proxyBtn: $("proxyBtn")
+    importBtn: $("importBtn"), mdPicker: $("mdPicker"), proxyBtn: $("proxyBtn"),
+    pullBtn: $("pullBtn"), restoreBtn: $("restoreBtn"), restoreCount: $("restoreCount"),
+    restorePop: $("restorePop"), restoreList: $("restoreList"), restoreClose: $("restoreClose")
   };
 
   var STORE = "xiray-writer-v2";
@@ -2242,6 +2305,118 @@
       });
   }
 
+  /* ============================================ 从 GitHub 拉取 / 找回删掉的文章 */
+
+  var pulling = false;
+  var deletedCache = [];
+
+  function pullNow() {
+    if (pulling) return;
+    pulling = true;
+    el.pullBtn.disabled = true;
+    var t0 = Date.now();
+    setStatus("正在从 GitHub 拉取…");
+    var progTimer = progressPoller(t0);
+    var openSlug = currentSlug;
+
+    fetch("/api/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        clearInterval(progTimer);
+        pulling = false;
+        el.pullBtn.disabled = false;
+        if (!res.ok) {
+          setStatus(res.message || ("拉取失败：" + (res.error || "")), "err");
+          return;
+        }
+        setStatus(res.message || "已拉取", "ok");
+        loadPosts();
+        loadCategories();
+        refreshSync();
+        loadDeleted();
+        // 正在写的那篇如果也被远端改了，问一句再重载，别把手上没保存的改动冲掉
+        if (openSlug && (res.files || []).indexOf("posts/" + openSlug + ".html") >= 0) {
+          if (confirm("《" + (el.title.value || openSlug) + "》在 GitHub 上有新版，重新载入？\n" +
+                      "选「取消」就保留你现在编辑器里的内容。")) openPost(openSlug);
+        }
+      })
+      .catch(function () {
+        clearInterval(progTimer);
+        pulling = false;
+        el.pullBtn.disabled = false;
+        setStatus("连不上本地服务，确认 写作台.bat 还在运行", "err");
+      });
+  }
+
+  function loadDeleted() {
+    fetch("/api/deleted", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        deletedCache = (res && res.posts) || [];
+        el.restoreBtn.hidden = !deletedCache.length;
+        el.restoreCount.textContent = deletedCache.length ? "（" + deletedCache.length + "）" : "";
+      })
+      .catch(function () {});
+  }
+
+  function openRestorePop() {
+    if (!deletedCache.length) { setStatus("历史里没有可找回的文章", "ok"); return; }
+    el.restoreList.innerHTML = deletedCache.map(function (p) {
+      return '<div class="rp-item" data-slug="' + esc(p.slug) + '">' +
+        '<span class="rp-title" title="' + esc(p.title) + '">' + esc(p.title) + "</span>" +
+        '<span class="rp-date">' + esc(p.deleted || "") + "</span>" +
+        '<button class="rp-go">找回</button></div>';
+    }).join("");
+    el.restorePop.hidden = false;
+    var r = el.restoreBtn.getBoundingClientRect();
+    el.restorePop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 348)) + "px";
+    el.restorePop.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + "px";
+  }
+
+  el.pullBtn.addEventListener("click", pullNow);
+  el.restoreBtn.addEventListener("click", openRestorePop);
+  el.restoreClose.addEventListener("click", function () { el.restorePop.hidden = true; });
+
+  el.restoreList.addEventListener("click", function (e) {
+    var btn = e.target.closest(".rp-go");
+    if (!btn) return;
+    var item = btn.closest(".rp-item");
+    var slug = item.getAttribute("data-slug");
+    btn.disabled = true;
+    btn.textContent = "…";
+    fetch("/api/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: slug })
+    }).then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) {
+          setStatus("找回失败：" + (res.error || ""), "err");
+          btn.disabled = false; btn.textContent = "找回";
+          return;
+        }
+        setStatus(res.message || "已找回", "ok");
+        el.restorePop.hidden = true;
+        loadPosts();
+        loadDeleted();
+        refreshSync();
+        openPost(slug);
+      })
+      .catch(function () {
+        setStatus("连不上本地服务", "err");
+        btn.disabled = false; btn.textContent = "找回";
+      });
+  });
+
+  document.addEventListener("click", function (e) {
+    if (el.restorePop.hidden) return;
+    if (el.restorePop.contains(e.target) || el.restoreBtn.contains(e.target)) return;
+    el.restorePop.hidden = true;
+  });
+
   /* ============================================ 新建 / 发布 */
 
   function newPost() {
@@ -2790,6 +2965,7 @@
   loadPosts();
   refreshSync();
   refreshProxy();
+  loadDeleted();
   window.addEventListener("focus", refreshSync);
   setStatus(had ? "已恢复上次未发布的内容" : "就绪");
 
