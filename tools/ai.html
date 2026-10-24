@@ -179,6 +179,90 @@
   .box .hint { font-size: .6875rem; color: var(--muted); font-family: var(--mono); }
   .box .hint b { color: var(--text-dim); font-weight: 400; }
 
+  /* ================= 引用文章 ================= */
+  .box { position: relative; }
+  .row-left { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+
+  .ref-btn {
+    display: inline-flex; align-items: center; gap: .3rem; line-height: 1.5;
+    padding: .12rem .5rem; font-size: .6875rem; font-family: var(--mono);
+    color: var(--muted); border: 1px solid var(--line); border-radius: 5px;
+  }
+  .ref-btn:hover { border-color: var(--muted); color: var(--text); }
+  .ref-btn.on { border-color: var(--accent-dim); color: var(--accent); }
+
+  .ref-chip {
+    display: flex; align-items: center; gap: .4rem; min-width: 0;
+    margin: 0 .15rem .4rem; padding: .18rem .25rem .18rem .5rem;
+    border: 1px solid var(--accent-dim); border-radius: 6px;
+    background: rgba(255, 184, 107, .07); font-size: .75rem; color: var(--text-dim);
+  }
+  .ref-chip[hidden] { display: none; }
+  .ref-chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ref-chip .sz {
+    flex: 0 0 auto; font-family: var(--mono); font-size: .625rem; color: var(--muted);
+  }
+  .ref-chip button {
+    flex: 0 0 auto; margin-left: auto; padding: 0 .3rem; line-height: 1;
+    font-size: .875rem; color: var(--muted); border-radius: 4px;
+  }
+  .ref-chip button:hover { color: var(--text); background: var(--bg); }
+
+  .ref-pop {
+    position: absolute; left: -.05rem; right: -.05rem; bottom: calc(100% + .45rem);
+    z-index: 30; display: flex; flex-direction: column;
+    max-height: min(23rem, 60vh);
+    background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .5); overflow: hidden;
+  }
+  .ref-pop[hidden] { display: none; }
+  .ref-pop .rp-head {
+    flex: 0 0 auto; padding: .45rem .5rem; border-bottom: 1px solid var(--line-soft);
+  }
+  .ref-pop .rp-head input {
+    width: 100%; font: inherit; font-size: .8125rem; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: .35rem .55rem; outline: none;
+  }
+  .ref-pop .rp-head input:focus { border-color: var(--muted); }
+  .ref-list { overflow-y: auto; min-height: 0; padding: .25rem; }
+  .ref-item {
+    display: block; width: 100%; text-align: left; padding: .4rem .55rem;
+    border: none; border-radius: 6px; background: none;
+  }
+  .ref-item:hover, .ref-item.hl { background: var(--bg); }
+  .ref-item .t {
+    display: block; font-size: .8125rem; color: var(--text); line-height: 1.5;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ref-item .m {
+    display: block; font-family: var(--mono); font-size: .625rem;
+    color: var(--muted); margin-top: .1rem;
+  }
+  .ref-item.draft .t { color: var(--accent); }
+  .ref-pop .rp-foot {
+    flex: 0 0 auto; padding: .35rem .55rem; border-top: 1px solid var(--line-soft);
+    font-size: .6875rem; color: var(--muted); font-family: var(--mono);
+  }
+  .ref-pop .rp-empty { padding: 1rem .6rem; font-size: .8125rem; color: var(--muted); text-align: center; }
+
+  /* 消息上的引用标记 */
+  .ref-tag {
+    display: inline-flex; align-items: center; gap: .3rem; margin-bottom: .4rem;
+    padding: .05rem .45rem; border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--mono); font-size: .625rem; color: var(--muted);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: none;
+  }
+  .ref-tag.again { cursor: pointer; }
+  .ref-tag.again:hover { border-color: var(--accent-dim); color: var(--text-dim); }
+
+  body.mini .ref-chip { font-size: .6875rem; }
+  body.mini .ref-pop { max-height: min(20rem, 58vh); }
+  @media (max-width: 400px) {
+    body.mini .ref-btn .lbl { display: none; }
+  }
+
   /* ================= 设置抽屉 ================= */
   .scrim {
     position: fixed; inset: 0; background: rgba(0, 0, 0, .45);
@@ -289,10 +373,26 @@
 
   <footer class="composer">
     <div class="box">
+      <div class="ref-chip" id="refChip" hidden>
+        <span class="ico">📄</span>
+        <span class="nm" id="refName"></span>
+        <span class="sz" id="refSize"></span>
+        <button id="refClear" title="不引用这篇">×</button>
+      </div>
       <textarea id="input" rows="1" placeholder="问点什么…"></textarea>
       <div class="row">
-        <span class="hint" id="hint">Enter 发送 · Shift+Enter 换行</span>
+        <div class="row-left">
+          <button class="ref-btn" id="refBtn" title="让 AI 读一篇博客文章">📄 <span class="lbl">引用文章</span></button>
+          <span class="hint" id="hint">Enter 发送 · Shift+Enter 换行</span>
+        </div>
         <button class="primary" id="sendBtn">发送</button>
+      </div>
+      <div class="ref-pop" id="refPop" hidden>
+        <div class="rp-head">
+          <input id="refSearch" spellcheck="false" placeholder="搜标题 / 类别…">
+        </div>
+        <div class="ref-list" id="refList"></div>
+        <div class="rp-foot" id="refFoot">选一篇，AI 会读全文再回答</div>
       </div>
     </div>
   </footer>
@@ -349,7 +449,11 @@
     fBase: $("fBase"), fModel: $("fModel"), fKey: $("fKey"),
     modelList: $("modelList"), saveBtn: $("saveBtn"), fetchModels: $("fetchModels"),
     drawerMsg: $("drawerMsg"), keyTip: $("keyTip"),
-    clearBtn: $("clearBtn"), sizeBtn: $("sizeBtn")
+    clearBtn: $("clearBtn"), sizeBtn: $("sizeBtn"),
+    refBtn: $("refBtn"), refPop: $("refPop"), refList: $("refList"),
+    refSearch: $("refSearch"), refFoot: $("refFoot"),
+    refChip: $("refChip"), refName: $("refName"), refSize: $("refSize"),
+    refClear: $("refClear")
   };
 
   /* ---------------- 模式：整页 / 小窗 / 内嵌 ----------------
@@ -390,10 +494,17 @@
   var LS_MODEL = "xiray.ai.model";
 
   var cfg = { base_url: "", model: "", has_key: false, key_hint: "", config_path: "" };
-  var messages = [];        // {role, content, reasoning?}
+  var messages = [];        // {role, content, reasoning?, ref?}
   var busy = false;
   var abort = null;
   var savedModels = [];
+
+  /* 引用的文章：正文只留在这台机器的内存里，不进对话记录、不进 localStorage。
+     每次请求作为 system 消息发一次，所以换文章对旧对话也立即生效。 */
+  var attach = null;        // { slug, title, meta, text, truncated }
+  var postsCache = null;
+  var postsAt = 0;
+  var REF_MAX = 30000;      // 单篇正文最多带这么多字符，超了截断并说明
 
   /* ---------------- 小工具 ---------------- */
 
@@ -536,6 +647,22 @@
     wrap.appendChild(who);
 
     if (m.reasoning) wrap.appendChild(buildThink(m));
+
+    if (m.role === "user" && m.ref && m.ref.title) {
+      var tag = document.createElement("button");
+      tag.type = "button";
+      tag.className = "ref-tag";
+      tag.textContent = "📄 " + m.ref.title;
+      if (m.ref.slug) {
+        // 刷新后正文已经不在内存里了，点一下按 slug 重新读
+        tag.classList.add("again");
+        tag.title = "点一下重新引用这篇";
+        tag.addEventListener("click", function () { attachBySlug(m.ref.slug, m.ref.title); });
+      } else {
+        tag.title = m.ref.title;
+      }
+      wrap.appendChild(tag);
+    }
 
     var body = document.createElement("div");
     body.className = "body";
@@ -709,6 +836,224 @@
       });
   }
 
+  /* ---------------- 引用文章 ----------------
+     让 AI 能读博客里的文章：选中后正文作为 system 消息随每次请求带上。
+     正文只存在这一页的内存里，不写进对话记录，也不进 localStorage。 */
+
+  var draftCache = null;    // 写作台里草稿的快照，每次打开面板重取一次
+
+  // 富文本 HTML → 纯文本，保留段落、代码块、表格的骨架
+  function domToText(html) {
+    var doc = new DOMParser().parseFromString("<div>" + String(html || "") + "</div>", "text/html");
+    var root = doc.body.firstChild;
+    if (!root) return "";
+    var out = [];
+    (function walk(n) {
+      if (n.nodeType === 3) { out.push(n.nodeValue); return; }
+      if (n.nodeType !== 1) return;
+      var cls = n.getAttribute ? (n.getAttribute("class") || "") : "";
+      if (cls.indexOf("ic-name") >= 0) return;      // 图片卡片上的文件名只是编辑器装饰
+      var tag = n.nodeName.toLowerCase();
+      if (tag === "br") { out.push("\n"); return; }
+      if (tag === "pre") {
+        out.push("\n```\n" + (n.textContent || "").replace(/\u200b/g, "").replace(/\n+$/, "") + "\n```\n");
+        return;
+      }
+      if (tag === "img") { out.push("![图片](" + (n.getAttribute("src") || "") + ")"); return; }
+      if (tag === "hr") { out.push("\n---\n"); return; }
+      var block = /^(p|div|h[1-6]|li|tr|blockquote|table|thead|tbody|ul|ol|section|figure|figcaption)$/.test(tag);
+      if (block) out.push("\n");
+      Array.prototype.forEach.call(n.childNodes, walk);
+      if (tag === "td" || tag === "th") out.push(" | ");
+      if (block) out.push("\n");
+    })(root);
+    return out.join("")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  // 被嵌在写作台里时，父窗口就是同一个服务上的写作页，可以直接要当前草稿
+  function writerDraft() {
+    try {
+      if (window.parent === window) return null;
+      var d = window.parent.document;
+      var rich = d.getElementById("richEditor");
+      var md = d.getElementById("mdEditor");
+      if (!rich && !md) return null;
+      var mdWrap = d.getElementById("mdWrap");
+      var isMd = !!(mdWrap && mdWrap.classList.contains("show"));
+      var text = isMd ? String((md && md.value) || "")
+                      : domToText(rich ? rich.innerHTML : "");
+      if (!text.trim()) return null;
+      var t = d.getElementById("title");
+      return { title: ((t && t.value) || "").trim() || "（未命名草稿）", text: text };
+    } catch (e) { return null; }
+  }
+
+  function refFootText() {
+    if (!attach) { el.refFoot.textContent = "选一篇，AI 会读全文再回答"; return; }
+    el.refFoot.textContent = "已引用 · " + attach.text.length.toLocaleString() + " 字符" +
+      (attach.truncated ? "（原文更长，只带前面一部分）" : "");
+  }
+
+  function setAttach(a) {
+    attach = a || null;
+    if (attach) {
+      el.refChip.hidden = false;
+      el.refName.textContent = attach.title;
+      el.refSize.textContent = attach.text.length.toLocaleString() + " 字符";
+      el.refBtn.classList.add("on");
+    } else {
+      el.refChip.hidden = true;
+      el.refBtn.classList.remove("on");
+    }
+    refFootText();
+  }
+
+  function closeRef() {
+    el.refPop.hidden = true;
+    el.refSearch.value = "";
+  }
+
+  function openRef() {
+    draftCache = isEmbed ? writerDraft() : null;
+    el.refPop.hidden = false;
+    el.refSearch.value = "";
+    renderRefList();
+    // 列表缓存 30 秒就够了：刚发布的文章也能出现，又不用每次点都拉一遍
+    if (postsCache && Date.now() - postsAt < 30000) {
+      el.refSearch.focus();
+      return;
+    }
+    if (!postsCache) el.refList.innerHTML = '<div class="rp-empty">读取文章列表…</div>';
+    loadPosts(true).then(function () {
+      renderRefList();
+      el.refSearch.focus();
+    }).catch(function (e) {
+      if (postsCache) { setStatus("列表没刷新成功，用的是缓存", "err"); return; }
+      el.refList.innerHTML = "";
+      var box = document.createElement("div");
+      box.className = "rp-empty";
+      box.textContent = "读不到文章列表：" + String((e && e.message) || e);
+      el.refList.appendChild(box);
+    });
+  }
+
+  function loadPosts(refresh) {
+    if (postsCache && !refresh) return Promise.resolve(postsCache);
+    return fetch("/api/posts", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.error || "请求失败");
+        postsCache = res.posts || [];
+        postsAt = Date.now();
+        return postsCache;
+      });
+  }
+
+  function loadPosts() {
+    if (postsCache) return Promise.resolve(postsCache);
+    return fetch("/api/posts", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.error || "请求失败");
+        postsCache = res.posts || [];
+        return postsCache;
+      });
+  }
+
+  function renderRefList() {
+    var kw = el.refSearch.value.trim().toLowerCase();
+    var hit = function (s) { return String(s || "").toLowerCase().indexOf(kw) >= 0; };
+
+    var items = [];
+    if (draftCache && (!kw || hit(draftCache.title) || hit(draftCache.text.slice(0, 400)))) {
+      items.push({
+        draft: true, title: draftCache.title,
+        meta: "写作台里正在写的 · " + draftCache.text.length + " 字符",
+        text: draftCache.text
+      });
+    }
+    (postsCache || []).forEach(function (p) {
+      if (kw && !(hit(p.title) || hit(p.category) || hit(p.date))) return;
+      items.push({
+        draft: false, slug: p.slug, title: p.title,
+        meta: [p.date, p.category].filter(Boolean).join(" · ")
+      });
+    });
+
+    el.refList.innerHTML = "";
+    if (!items.length) {
+      var none = document.createElement("div");
+      none.className = "rp-empty";
+      none.textContent = kw ? "没有匹配的文章" : "还没有文章";
+      el.refList.appendChild(none);
+      return;
+    }
+
+    items.forEach(function (it) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "ref-item" + (it.draft ? " draft" : "");
+      b.innerHTML = '<span class="t">' + esc(it.title) + "</span>" +
+        '<span class="m">' + esc(it.meta || "") + "</span>";
+      b.addEventListener("click", function () { pickRef(it); });
+      el.refList.appendChild(b);
+    });
+  }
+
+  function applyAttach(title, text, meta, slug) {
+    var truncated = false;
+    if (text.length > REF_MAX) { text = text.slice(0, REF_MAX); truncated = true; }
+    setAttach({ slug: slug || "", title: title, meta: meta || "", text: text, truncated: truncated });
+    setStatus("已引用 " + (title.length > 14 ? title.slice(0, 14) + "…" : title) +
+      (truncated ? "（太长，已截断）" : ""), "ok");
+    el.input.focus();
+  }
+
+  function attachBySlug(slug, fallbackTitle) {
+    if (!slug) return;
+    el.refBtn.disabled = true;
+    setStatus("正在读取「" + (fallbackTitle || slug) + "」…");
+    return fetch("/api/post?slug=" + encodeURIComponent(slug), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        el.refBtn.disabled = false;
+        if (!res.ok) throw new Error(res.error || "读取失败");
+        var p = res.post || {};
+        var raw = p.source || p.body_html || "";
+        var text = (p.mode === "md") ? String(raw) : domToText(raw);
+        if (!text.trim()) throw new Error("这篇的正文是空的");
+        applyAttach(p.title || fallbackTitle || slug, text,
+          [p.date, p.category].filter(Boolean).join(" · ")
+          + (p.mode === "md" ? " · Markdown" : ""),
+          p.slug || slug);
+      })
+      .catch(function (e) {
+        el.refBtn.disabled = false;
+        setStatus("读取失败：" + String((e && e.message) || e), "err");
+      });
+  }
+
+  function pickRef(it) {
+    closeRef();
+    if (it.draft) { applyAttach(it.title, it.text, "写作台草稿", ""); return; }
+    attachBySlug(it.slug, it.title);
+  }
+
+  function refPrompt(a) {
+    return "用户从自己的博客里引用了下面这篇文章，当作参考资料来读。" +
+      "回答相关问题时以文中内容为准；引用原文用「」标出，不要编造文中没有的说法；" +
+      "如果问题和这篇文章无关，就正常回答，不用硬往文章上靠。\n\n" +
+      "标题：" + a.title + "\n" +
+      (a.meta ? "信息：" + a.meta + "\n" : "") +
+      "篇幅：约 " + a.text.length + " 字符" +
+      (a.truncated ? "（原文更长，以下只是前面一部分）" : "") + "\n" +
+      "---------- 正文开始 ----------\n" + a.text + "\n---------- 正文结束 ----------";
+  }
+
   /* ---------------- 发送 ---------------- */
 
   function autoGrow() {
@@ -725,9 +1070,14 @@
   function send() {
     if (busy) { stop(); return; }
     var text = el.input.value.trim();
+    // 选好了文章但没打字：默认让它梳理这篇
+    if (!text && attach) text = "这篇文章讲了什么？帮我梳理一下要点。";
     if (!text) return;
 
-    messages.push({ role: "user", content: text });
+    messages.push({
+      role: "user", content: text,
+      ref: attach ? { title: attach.title, slug: attach.slug || "" } : null
+    });
     var aiMsg = { role: "assistant", content: "", reasoning: "", done: false };
     messages.push(aiMsg);
     el.input.value = "";
@@ -761,8 +1111,11 @@
     }
 
     abort = new AbortController();
-    var history = messages.filter(function (m) { return !m.error && (m.content || ""); })
-      .map(function (m) { return { role: m.role, content: m.content }; });
+    var history = [];
+    // 引用的文章放在最前面，每轮都带一次：中途换文章，旧对话也立刻按新文章来
+    if (attach) history.push({ role: "system", content: refPrompt(attach) });
+    messages.filter(function (m) { return !m.error && (m.content || ""); })
+      .forEach(function (m) { history.push({ role: m.role, content: m.content }); });
 
     fetch("/api/ai/chat", {
       method: "POST",
@@ -902,7 +1255,7 @@
 
   function persist() {
     store(LS_MSG, messages.filter(function (m) { return !m.error; }).map(function (m) {
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: m.content, ref: m.ref || undefined };
     }));
   }
 
@@ -923,6 +1276,28 @@
   el.saveBtn.addEventListener("click", saveConfig);
   el.fetchModels.addEventListener("click", fetchModels);
 
+  /* ---- 引用文章：按钮开关面板，点外面 / Esc 收起 ---- */
+  el.refBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (el.refPop.hidden) openRef(); else closeRef();
+  });
+  el.refPop.addEventListener("click", function (e) { e.stopPropagation(); });
+  el.refSearch.addEventListener("input", renderRefList);
+  el.refSearch.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      var first = el.refList.querySelector(".ref-item");
+      if (first) first.click();
+    }
+  });
+  el.refClear.addEventListener("click", function () {
+    setAttach(null);
+    setStatus("已取消引用");
+  });
+  document.addEventListener("click", function () {
+    if (!el.refPop.hidden) closeRef();
+  });
+
   el.clearBtn.addEventListener("click", function () {
     if (busy) return;
     if (messages.length && !confirm("清空当前对话？")) return;
@@ -930,6 +1305,7 @@
     el.thread.innerHTML = "";
     el.empty.hidden = false;
     store(LS_MSG, []);
+    setAttach(null);
     setStatus("已清空");
   });
 
@@ -952,7 +1328,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeDrawer();
+    if (e.key === "Escape") { closeDrawer(); closeRef(); }
     if ((e.ctrlKey || e.metaKey) && e.key === "l") {
       e.preventDefault();
       el.clearBtn.click();
@@ -964,7 +1340,7 @@
   var saved = restore(LS_MSG, []);
   if (Array.isArray(saved) && saved.length) {
     messages = saved.map(function (m) {
-      return { role: m.role, content: m.content, done: true };
+      return { role: m.role, content: m.content, ref: m.ref, done: true };
     });
   }
   renderAll();

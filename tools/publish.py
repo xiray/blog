@@ -909,14 +909,20 @@ def ai_chat(handler, payload):
     if not isinstance(messages, list) or not messages:
         return handler._json({"ok": False, "error": "没有对话内容"}, 400)
 
-    clean = []
-    for m in messages[-AI_MAX_MESSAGES:]:
+    # 系统提示（引用的文章正文就放在这儿）必须留着，不能被轮数上限切掉；
+    # 只对 user / assistant 做「最近 N 条」的限制。
+    systems, rest = [], []
+    for m in messages:
         if not isinstance(m, dict):
             continue
         role = m.get("role")
         content = m.get("content")
-        if role in ("user", "assistant", "system") and isinstance(content, str) and content.strip():
-            clean.append({"role": role, "content": content})
+        if role not in ("user", "assistant", "system"):
+            continue
+        if not isinstance(content, str) or not content.strip():
+            continue
+        (systems if role == "system" else rest).append({"role": role, "content": content})
+    clean = systems + rest[-AI_MAX_MESSAGES:]
     if not clean:
         return handler._json({"ok": False, "error": "没有可发送的内容"}, 400)
 
