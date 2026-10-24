@@ -66,8 +66,12 @@
   .post-items li.active { background: var(--bg); box-shadow: inset 2px 0 0 var(--accent); }
   .post-items .pi-title {
     font-size: .8125rem; color: var(--text-dim); line-height: 1.4;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden; padding-right: 1.4rem;
+  }
+  /* 选中的那篇不裁：长标题（比如 LeetCode 19 那种）要能看全 */
+  .post-items li.active .pi-title {
+    display: block; overflow: visible; -webkit-line-clamp: none;
   }
   .post-items li.active .pi-title { color: var(--text); }
   .post-items .pi-meta {
@@ -366,6 +370,22 @@
 
   /* 代理探测不通时的提示色 */
   .ghost.warn { color: #e0795f; border-color: rgba(224, 121, 95, .55); }
+
+  /* 本地草稿和线上版不一致时的提示条 */
+  .draft-bar {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    padding: .45rem 1.5rem; font-size: .75rem; color: var(--text-dim);
+    background: rgba(255, 184, 107, .09);
+    border-bottom: 1px solid rgba(255, 184, 107, .22);
+  }
+  .draft-bar[hidden] { display: none; }
+  .draft-bar .grow { flex: 1 1 16rem; min-width: 0; line-height: 1.5; }
+  .draft-bar b { color: var(--accent); font-weight: 600; }
+  .draft-bar button {
+    flex: 0 0 auto; padding: .15rem .55rem; font-size: .6875rem;
+    border: 1px solid var(--line); border-radius: 4px; color: var(--text-dim);
+  }
+  .draft-bar button:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -408,6 +428,12 @@
     </aside>
 
     <section class="main">
+
+      <div class="draft-bar" id="draftBar" hidden>
+        <span class="grow" id="draftBarText"></span>
+        <button id="draftDisk">用线上版</button>
+        <button id="draftKeep">保留草稿</button>
+      </div>
 
       <div class="fields">
         <input type="text" id="title" placeholder="标题" autocomplete="off">
@@ -543,7 +569,9 @@
     tblPop: $("tblPop"), tblGrid: $("tblGrid"), tblCount: $("tblCount"),
     importBtn: $("importBtn"), mdPicker: $("mdPicker"), proxyBtn: $("proxyBtn"),
     pullBtn: $("pullBtn"), restoreBtn: $("restoreBtn"), restoreCount: $("restoreCount"),
-    restorePop: $("restorePop"), restoreList: $("restoreList"), restoreClose: $("restoreClose")
+    restorePop: $("restorePop"), restoreList: $("restoreList"), restoreClose: $("restoreClose"),
+    draftBar: $("draftBar"), draftBarText: $("draftBarText"),
+    draftDisk: $("draftDisk"), draftKeep: $("draftKeep")
   };
 
   var STORE = "xiray-writer-v2";
@@ -2097,7 +2125,7 @@
         el.postItems.innerHTML = posts.map(function (p) {
           return '<li data-slug="' + esc(p.slug) + '"' +
             (p.slug === currentSlug ? ' class="active"' : "") + ">" +
-            '<span class="pi-title">' + esc(p.title) + "</span>" +
+            '<span class="pi-title" title="' + esc(p.title) + '">' + esc(p.title) + "</span>" +
             '<span class="pi-meta"><span>' + esc(p.date) + "</span><span>" +
             esc(p.category || "未分类") + "</span></span>" +
             '<button class="pi-del" title="删除">✕</button></li>';
@@ -2140,6 +2168,7 @@
       .then(function (res) {
         if (!res.ok) { setStatus("打开失败", "err"); return; }
         var p = res.post;
+        if (draftInfo && draftInfo.currentSlug !== p.slug) el.draftBar.hidden = true;
         currentSlug = p.slug;
         el.title.value = p.title || "";
         el.date.value = p.date || todayStr();
@@ -2200,6 +2229,7 @@
     try {
       var d = JSON.parse(raw);
       if (!d.title && !d.rich && !d.md) return false;
+      draftInfo = d;
       el.title.value = d.title || "";
       el.date.value = d.date || todayStr();
       el.excerpt.value = d.excerpt || "";
@@ -2215,6 +2245,51 @@
       renderMdPreview();
       return true;
     } catch (e) { return false; }
+  }
+
+  /* 草稿 vs 线上版：草稿是"上次没发布的内容"，优先级一直被排在磁盘文件前面。
+     如果它是旧版本（比如只存了半篇），打开写作台看到的就是短一截的文章，
+     一发布还会把线上好好的文章覆盖掉。所以这里对一下，不一致就摆个提示条让你选。 */
+  var draftInfo = null;
+
+  function normSrc(s) {
+    return String(s || "").replace(/[\s\u200b\u00a0]+/g, "");
+  }
+
+  function checkDraftConflict() {
+    if (!draftInfo || !draftInfo.currentSlug) return;
+    var slug = draftInfo.currentSlug;
+    fetch("/api/post?slug=" + encodeURIComponent(slug), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok || !res.post) return;
+        var p = res.post;
+        if (p.slug !== currentSlug) return;          // 期间已经切到别的文章了
+        var isMd = (p.mode || "rich") === "md";
+        var disk = p.source || "";
+        var mine = isMd ? (draftInfo.md || "") : (draftInfo.rich || "");
+        if (normSrc(mine) === normSrc(disk)) return;  // 一样，不用管
+
+        var a = normSrc(mine).length, b = normSrc(disk).length;
+        el.draftBarText.innerHTML =
+          "本地草稿和线上版不一样：《" + esc(p.title || slug) + "》草稿 <b>" +
+          a.toLocaleString() + "</b> 字 / 线上 <b>" + b.toLocaleString() + "</b> 字。" +
+          (a < b ? "草稿看起来短一截，可能是旧版本。" : "草稿更长，可能是你后来补的内容。");
+        el.draftBar.hidden = false;
+
+        el.draftDisk.onclick = function () {
+          el.draftBar.hidden = true;
+          openPost(slug);
+          setTimeout(saveDraft, 600);   // 用线上版覆盖掉旧草稿
+          setStatus("已换成线上版", "ok");
+        };
+        el.draftKeep.onclick = function () {
+          el.draftBar.hidden = true;
+          saveDraft();
+          setStatus("保留草稿，发布时按草稿来", "ok");
+        };
+      })
+      .catch(function () {});
   }
 
   /* ============================================ 更新（把本地改动推到 GitHub） */
@@ -2424,6 +2499,8 @@
       if (!confirm("清空当前内容？")) return;
     }
     currentSlug = "";
+    el.draftBar.hidden = true;
+    draftInfo = null;
     el.title.value = "";
     el.excerpt.value = "";
     el.rich.innerHTML = "";
@@ -2966,6 +3043,7 @@
   refreshSync();
   refreshProxy();
   loadDeleted();
+  checkDraftConflict();
   window.addEventListener("focus", refreshSync);
   setStatus(had ? "已恢复上次未发布的内容" : "就绪");
 
