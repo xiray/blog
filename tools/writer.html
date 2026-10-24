@@ -565,7 +565,7 @@
   }
 
   function mdToHtml(src) {
-    var lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    var lines = String(healEscapedMd(src || "")).replace(/\r\n/g, "\n").split("\n");
     var out = [], para = [], i = 0;
 
     function flush() {
@@ -869,6 +869,54 @@
       if (n.parentNode) n.parentNode.removeChild(n);
     });
     return root;
+  }
+
+  /* ---- 自愈：被转义成字母的格式标签还原 --------------------------------
+     历史草稿里存过 &lt;span style="color: rgb(255,0,0)"&gt;不确定&lt;/span&gt;
+     这种被 esc 过的格式标签，页面上就只能看到一串字母，而且改也改不掉
+     （它是纯文本，不是标签）。这里在文本节点里发现白名单格式标签的转义
+     残留就顺手还原成真标签。
+     代码块里不碰 —— 那里出现 &lt; 本来就是正文。 */
+  var FMT_TAG_RE = /<\/?\s*(span|u|b|strong|i|em|s|del|strike|mark|sub|sup|small)\b[^<>]{0,200}>/i;
+
+  function unescMarkup(s) {
+    return String(s)
+      .replace(/&amp;(lt|gt|quot|#39);/gi, "&$1;")   // 双重转义先降一层
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+  }
+
+  function reviveEscapedFmt(root) {
+    if (!root) return root;
+    var hit = [], walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    while (walker.nextNode()) {
+      var n = walker.currentNode, p = n.parentNode;
+      if (p && /^(PRE|CODE|TEXTAREA|SCRIPT|STYLE)$/.test(p.nodeName.toUpperCase())) continue;
+      var v = n.nodeValue;
+      // 便宜的预筛：既没有 &lt; 也没有 < 的文本不用往下走
+      if (!v || (v.indexOf(";") < 0 && v.indexOf("<") < 0)) continue;
+      // 转义残留要先还原一层再看，否则 &amp;lt;span 也认不出来
+      if (FMT_TAG_RE.test(unescMarkup(v))) hit.push(n);
+    }
+    hit.forEach(function (t) {
+      var html = unescMarkup(t.nodeValue);
+      if (!FMT_TAG_RE.test(html)) return;
+      var box = document.createElement("div");
+      box.innerHTML = html;
+      sanitize(box, { fmt: true });          // 还原出来的标签也过一遍白名单
+      if (!t.parentNode) return;
+      while (box.firstChild) t.parentNode.insertBefore(box.firstChild, t);
+      t.parentNode.removeChild(t);
+    });
+    return root;
+  }
+
+  // Markdown 里也藏着同样的转义残留：先看还原后有没有白名单格式标签，有才动
+  function healEscapedMd(src) {
+    var u = unescMarkup(src);
+    return FMT_TAG_RE.test(u) ? u : src;
   }
 
   /* ---- 深色底 / 浅色字的清洗 ----------------------------------------
@@ -2013,10 +2061,11 @@
         slugTouched = true;
 
         if ((p.mode || "rich") === "md") {
-          el.md.value = p.source || "";
+          el.md.value = healEscapedMd(p.source || "");
           el.rich.innerHTML = mdToHtml(el.md.value);
         } else {
           el.rich.innerHTML = p.source || p.body_html || "";
+          reviveEscapedFmt(el.rich);
           el.md.value = htmlToMd(el.rich.innerHTML);
         }
         ensureChips();
@@ -2033,6 +2082,7 @@
   function currentBodyHtml() {
     if (mode === "rich") {
       var clone = el.rich.cloneNode(true);
+      reviveEscapedFmt(clone);          // 旧草稿里的转义标签先还原，再导出
       sanitize(clone, { fmt: true });
       // 代码块回车用的零宽锚点只在编辑器里有用，别带进线上文章
       return clone.innerHTML.replace(/\u200b/g, "");
@@ -2068,7 +2118,8 @@
       el.excerpt.value = d.excerpt || "";
       el.slug.value = d.slug || "";
       el.rich.innerHTML = d.rich || "";
-      el.md.value = d.md || "";
+      el.md.value = healEscapedMd(d.md || "");
+      reviveEscapedFmt(el.rich);
       ensureChips();
       currentSlug = d.currentSlug || "";
       slugTouched = !!d.slugTouched;
