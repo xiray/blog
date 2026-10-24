@@ -1,0 +1,12 @@
+{
+  "slug": "leetcode-19-n",
+  "title": "LeetCode 19 删除链表的倒数第 N 个结点：快慢针法与哑节点边界处理",
+  "date": "2026-10-24",
+  "category": "代码编写",
+  "excerpt": "LeetCode 19 删除链表的倒数第 N 个结点：双指针法与哑节点边界处理",
+  "minutes": 1,
+  "mode": "md",
+  "source": "## 整体思路\n> 给你一个链表，删除链表的倒数第 n 个结点，并且返回链表的头结点。\n\n解题方法：快慢指针+哑节点（dummy node）  \n## 快慢指针\n因为链表的节点结构为  `int val; ListNode *next;`，所以无法直接找到倒数第几个节点，需要通过两个距离相差的n个节点的两个指针（fast 和 slow）来实现。先让fast运动n个节点，然后两个指针一起运动，直到fast到达链表末尾(`fast -> next == nullptr`)，即slow到达第n-1个节点。  \n## 变化链表节点所指向的下一个节点\n将slow所在节点的next跳过第n个节点，链接到第n+1个节点，过程如下：\n```\nslow -> next = slow -> next -> next;\n  ↑      ↑                       ↑\n``` \n\n\n",
+  "body_html": "<h3>整体思路</h3>\n<blockquote><p>给你一个链表，删除链表的倒数第 n 个结点，并且返回链表的头结点。</p></blockquote>\n<p>解题方法：快慢指针+哑节点（dummy node）</p>\n<h3>快慢指针</h3>\n<p>因为链表的节点结构为  <code>int val; ListNode *next;</code>，所以无法直接找到倒数第几个节点，需要通过两个距离相差的n个节点的两个指针（fast 和 slow）来实现。先让fast运动n个节点，然后两个指针一起运动，直到fast到达链表末尾(<code>fast -&gt; next == nullptr</code>)，即slow到达第n-1个节点。</p>\n<h3>变化链表节点所指向的下一个节点</h3>\n<p>将slow所在节点的next跳过第n个节点，链接到第n+1个节点，过程如下：</p>\n<pre><code>slow -&gt; next = slow -&gt; next -&gt; next;\n  ↑      ↑                       ↑</code></pre>",
+  "updated": "2026-10-24 16:30:44"
+}

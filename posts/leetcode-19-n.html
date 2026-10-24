@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetCode 19 删除链表的倒数第 N 个结点：快慢针法与哑节点边界处理 — xiray</title>
+<meta name="description" content="LeetCode 19 删除链表的倒数第 N 个结点：双指针法与哑节点边界处理">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>LeetCode 19 删除链表的倒数第 N 个结点：快慢针法与哑节点边界处理</h1>
+      <p class="article-meta">2026 · 10 · 24
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 1 分钟</p>
+    </header>
+
+    <div class="prose">
+<h3>整体思路</h3>
+<blockquote><p>给你一个链表，删除链表的倒数第 n 个结点，并且返回链表的头结点。</p></blockquote>
+<p>解题方法：快慢指针+哑节点（dummy node）</p>
+<h3>快慢指针</h3>
+<p>因为链表的节点结构为  <code>int val; ListNode *next;</code>，所以无法直接找到倒数第几个节点，需要通过两个距离相差的n个节点的两个指针（fast 和 slow）来实现。先让fast运动n个节点，然后两个指针一起运动，直到fast到达链表末尾(<code>fast -&gt; next == nullptr</code>)，即slow到达第n-1个节点。</p>
+<h3>变化链表节点所指向的下一个节点</h3>
+<p>将slow所在节点的next跳过第n个节点，链接到第n+1个节点，过程如下：</p>
+<pre><code>slow -&gt; next = slow -&gt; next -&gt; next;
+  ↑      ↑                       ↑</code></pre>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
