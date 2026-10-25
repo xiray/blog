@@ -544,13 +544,6 @@ body {
   position: relative;
 }
 
-/* 缩进参考线由 hl.js 的 HL.guides() 用 px 精确画（CSS 的 ch 单位跟伪元素叠加时
-   相位对不准，会整体偏几个字符）。这里只留颜色和字宽。 */
-.prose pre,
-.code-wrap pre {
-  --guide-w: 4ch;
-}
-
 .prose pre code {
   background: none;
   border: none;
@@ -560,8 +553,8 @@ body {
 }
 
 /* 右上角的语言角标：来自 <pre data-lang="cpp">，由 hl.js 自动补上。
-   纯装饰，不参与选中/复制（user-select:none）。
-   注意用的是 ::after —— ::before 已经被缩进参考线占了。 */
+   纯装饰，不参与选中/复制（user-select:none）。 */
+
 .prose pre[data-lang]::after,
 #richEditor pre[data-lang]::after,
 #mdPreview pre[data-lang]::after {
@@ -586,56 +579,54 @@ body {
 
 /* ---------------- 语法高亮配色 ----------------
    由 assets/hl.js 给 token 打上 .t-xxx 类。
-   色值全部从 VS Code 里那段 C++ 截图上采下来的（背景 #121314）：
-   声明/类型珊瑚红、控制流与预处理藕紫、函数名淡紫、方法调用橙、
-   字符串浅蓝、数字灰绿、括号黄、标点近白。 */
+   色相分配照 VS Code 那段 C++ 代码来（声明红、控制流紫、类型青、
+   函数淡紫、方法调用橙、字符串蓝、数字绿、括号黄），
+   但饱和度/亮度整体再推高一档，暗底上更"跳"。 */
 :root {
-  --hl-kw: #f47b6f;    /* 声明 / 类型 / 修饰符 */
-  --hl-ctl: #c186c1;   /* 控制流 if/for/return —— VS Code 跟声明是两种颜色 */
-  --hl-pre: #c186c1;   /* 预处理指令 / 宏 */
-  --hl-typ: #65c9b0;   /* 类型 / 类名 */
-  --hl-cls: #65c9b0;   /* 类名 / 枚举 */
-  --hl-var: #65c9b0;   /* 变量 / 内置函数 */
-  --hl-fn: #d1a9ff;    /* 函数定义 */
-  --hl-call: #f6a64f;  /* 方法调用 obj.method() */
-  --hl-str: #aed6ff;   /* 字符串 / 头文件 */
-  --hl-num: #b7cea6;   /* 数字 / 常量 */
-  --hl-op: #d4d4d4;    /* 运算符 */
-  --hl-pun: #cad1d9;   /* 标点 ; , . : */
-  --hl-br: #f8d700;    /* 括号 (){}[] —— VS Code 那套括号着色 */
-  --hl-com: #6a737d;   /* 注释 */
-  --hl-key: #aed6ff;   /* JSON 键 / 对象属性 */
-  --hl-tag: #f47b6f;   /* HTML 标签 */
-  --hl-attr: #65c9b0;  /* HTML 属性名 */
-  --hl-sel: #f6a64f;   /* CSS 选择器 */
-  --hl-meta: #6a737d;  /* doctype / diff 头 */
-  --hl-dec: #d1a9ff;   /* 注解 / 装饰器 */
-  --guide: rgba(255, 255, 255, 0.055); /* 缩进参考线 */
+  --hl-kw: #ff6f5e;    /* 声明 / 类型 / 修饰符 */
+  --hl-ctl: #d78bff;   /* 控制流 if/for/return —— VS Code 跟声明是两种颜色 */
+  --hl-pre: #d78bff;   /* 预处理指令 / 宏 */
+  --hl-typ: #35e6bd;   /* 类型 / 类名 */
+  --hl-cls: #35e6bd;   /* 类名 / 枚举 */
+  --hl-var: #35e6bd;   /* 变量 / 内置函数 */
+  --hl-fn: #bd93ff;    /* 函数定义 */
+  --hl-call: #ffab40;  /* 方法调用 obj.method() */
+  --hl-str: #86cdff;   /* 字符串 / 头文件 */
+  --hl-num: #b3e878;   /* 数字 / 常量 */
+  --hl-op: #dcdcdc;    /* 运算符 */
+  --hl-pun: #cfd7e0;   /* 标点 ; , . : */
+  --hl-br: #ffe23c;    /* 括号 (){}[] —— VS Code 那套括号着色 */
+  --hl-com: #7a8591;   /* 注释 */
+  --hl-key: #86cdff;   /* JSON 键 / 对象属性 */
+  --hl-tag: #ff6f5e;   /* HTML 标签 */
+  --hl-attr: #35e6bd;  /* HTML 属性名 */
+  --hl-sel: #ffab40;   /* CSS 选择器 */
+  --hl-meta: #7a8591;  /* doctype / diff 头 */
+  --hl-dec: #bd93ff;   /* 注解 / 装饰器 */
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --hl-kw: #b8372a;
-    --hl-ctl: #8e3f8e;
-    --hl-pre: #8e3f8e;
-    --hl-typ: #0f7a6a;
-    --hl-cls: #0f7a6a;
-    --hl-var: #0f7a6a;
-    --hl-fn: #6b3fa0;
-    --hl-call: #a05a00;
-    --hl-str: #16537e;
-    --hl-num: #4a6b2f;
-    --hl-op: #24292f;
-    --hl-pun: #3b4249;
-    --hl-br: #8a6d00;
+    --hl-kw: #d81f0c;
+    --hl-ctl: #a012d4;
+    --hl-pre: #a012d4;
+    --hl-typ: #00876b;
+    --hl-cls: #00876b;
+    --hl-var: #00876b;
+    --hl-fn: #6410d4;
+    --hl-call: #b45300;
+    --hl-str: #0058d0;
+    --hl-num: #3d7a00;
+    --hl-op: #1a1f24;
+    --hl-pun: #333a42;
+    --hl-br: #96700a;
     --hl-com: #6e7781;
-    --hl-key: #16537e;
-    --hl-tag: #b8372a;
-    --hl-attr: #0f7a6a;
-    --hl-sel: #a05a00;
+    --hl-key: #0058d0;
+    --hl-tag: #d81f0c;
+    --hl-attr: #00876b;
+    --hl-sel: #b45300;
     --hl-meta: #6e7781;
-    --hl-dec: #6b3fa0;
-    --guide: rgba(0, 0, 0, 0.07);
+    --hl-dec: #6410d4;
   }
 }
 
