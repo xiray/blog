@@ -579,44 +579,53 @@ body {
    关键字红、字符串浅蓝、数字蓝、函数紫、类型橙、类名绿、注释灰 —— 
    这样从 GitHub 复制过来的观感是一致的。 */
 :root {
-  --hl-kw: #ff7b72;    /* 关键字 */
-  --hl-str: #a5d6ff;   /* 字符串 */
-  --hl-com: #8b949e;   /* 注释 */
-  --hl-num: #79c0ff;   /* 数字 / 布尔 / 常量 */
-  --hl-fn: #d2a8ff;    /* 函数名 */
-  --hl-typ: #ffa657;   /* 类型 / 内置类型 */
-  --hl-cls: #7ee787;   /* 类名 / 枚举 */
-  --hl-var: #ffa198;   /* 变量 / 属性 / 内置函数 */
-  --hl-pre: #ff9bce;   /* 预处理指令 / 宏 */
-  --hl-dec: #d2a8ff;   /* 注解 / 装饰器 */
-  --hl-op: #a5b3c2;    /* 运算符 */
-  --hl-pun: #a5b3c2;   /* 标点 */
-  --hl-key: #79c0ff;   /* JSON 键 / 对象属性 */
-  --hl-tag: #7ee787;   /* HTML 标签 */
-  --hl-attr: #79c0ff;  /* HTML 属性名 */
-  --hl-sel: #d2a8ff;   /* CSS 选择器 */
-  --hl-meta: #8b949e;  /* doctype / diff 头 */
+  --hl-kw: #ff3d6e;    /* 关键字 —— 荧光红 */
+  --hl-str: #5cf2a4;   /* 字符串 —— 荧光绿 */
+  --hl-com: #7f8fa6;   /* 注释 —— 唯一保持低饱和的，压住整体 */
+  --hl-num: #ffb84d;   /* 数字 / 布尔 / 常量 —— 琥珀 */
+  --hl-fn: #c77dff;    /* 函数名 —— 紫 */
+  --hl-typ: #22d3ee;   /* 类型 / 内置类型 —— 青 */
+  --hl-cls: #ffe45c;   /* 类名 / 枚举 —— 亮黄 */
+  --hl-var: #ff7eb6;   /* 变量 / 属性 / 内置函数 —— 粉 */
+  --hl-pre: #ff4fd8;   /* 预处理指令 / 宏 —— 品红 */
+  --hl-dec: #ffcc33;   /* 注解 / 装饰器 —— 金 */
+  --hl-op: #ff9a5c;    /* 运算符 —— 橙 */
+  --hl-pun: #c3cee0;   /* 标点 */
+  --hl-key: #6fd6ff;   /* JSON 键 / 对象属性 —— 天蓝 */
+  --hl-tag: #ff6b6b;   /* HTML 标签 —— 珊瑚红 */
+  --hl-attr: #ffd84d;  /* HTML 属性名 —— 亮黄 */
+  --hl-sel: #a3ff7a;   /* CSS 选择器 —— 黄绿 */
+  --hl-meta: #93a4ba;  /* doctype / diff 头 */
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --hl-kw: #cf222e;
-    --hl-str: #0a3069;
-    --hl-com: #6e7781;
-    --hl-num: #0550ae;
-    --hl-fn: #8250df;
-    --hl-typ: #953800;
-    --hl-cls: #116329;
-    --hl-var: #bc4c00;
-    --hl-pre: #cf222e;
-    --hl-dec: #8250df;
-    --hl-op: #3b434b;
-    --hl-pun: #4b5563;
-    --hl-key: #0550ae;
-    --hl-tag: #116329;
-    --hl-attr: #0550ae;
-    --hl-sel: #8250df;
-    --hl-meta: #6e7781;
+    --hl-kw: #d40a55;
+    --hl-str: #087a35;
+    --hl-com: #6b747e;
+    --hl-num: #b8500a;
+    --hl-fn: #6d13d4;
+    --hl-typ: #0362b0;
+    --hl-cls: #0a6b72;
+    --hl-var: #b31b6f;
+    --hl-pre: #a0159e;
+    --hl-dec: #8a13b8;
+    --hl-op: #2f3c4c;
+    --hl-pun: #46525f;
+    --hl-key: #0b56c4;
+    --hl-tag: #b81636;
+    --hl-attr: #9a5b00;
+    --hl-sel: #4d7c0f;
+    --hl-meta: #5f6b78;
+  }
+}
+
+/* 深色下给高饱和颜色一点点辉光，观感更"亮"，但不影响清晰度 */
+@media (prefers-color-scheme: dark) {
+  pre .t-kw, pre .t-pre, pre .t-str, pre .t-fn,
+  pre .t-typ, pre .t-cls, pre .t-var, pre .t-num,
+  pre .t-key, pre .t-tag, pre .t-attr, pre .t-sel {
+    text-shadow: 0 0 10px color-mix(in srgb, currentColor 34%, transparent);
   }
 }
 
