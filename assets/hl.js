@@ -484,10 +484,11 @@
     pre.setAttribute("data-copy", "1");
   }
 
+  /* 复制：优先走 execCommand（同步、在用户手势里，谁都能用），
+     失败再交给 Clipboard API。反过来会踩坑 —— 异步回调里已经
+     失去 transient activation，execCommand 会被拒。 */
   function copyText(text, cb) {
-    var ok = function () { cb(true); };
-    var bad = function () { cb(false); };
-    var legacy = function () {
+    var viaLegacy = function () {
       try {
         var ta = document.createElement("textarea");
         ta.value = text;
@@ -498,14 +499,20 @@
         ta.setSelectionRange(0, text.length);
         var done = document.execCommand("copy");
         document.body.removeChild(ta);
-        done ? ok() : bad();
-      } catch (e) { bad(); }
+        return !!done;
+      } catch (e) {
+        return false;
+      }
     };
+    if (viaLegacy()) { cb(true); return; }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(ok, legacy);
-    } else {
-      legacy();
+      navigator.clipboard.writeText(text).then(
+        function () { cb(true); },
+        function () { cb(false); }
+      );
+      return;
     }
+    cb(false);
   }
 
   if (typeof document !== "undefined" && document.addEventListener) {

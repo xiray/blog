@@ -634,8 +634,9 @@ body {
 .code-wrap pre[data-lang-label] { padding-top: 1.75rem; }
 
 /* 有复制按钮的块一律留出顶部那一条，不然按钮会压住第一行
-   （纯文本块没有语言角标，也得留，否则「复制」直接盖在第一个字上） */
-.code-block > pre { padding-top: 1.75rem; }
+   （纯文本块没有语言角标，也得留，否则「复制」直接盖在第一个字上）。
+   用 [data-copy] 抬特异性，压过 ai.html 内联的 .code-wrap pre padding。 */
+.code-block > pre[data-copy="1"] { padding-top: 1.75rem; }
 
 /* ---------------- 语法高亮配色 ----------------
    由 assets/hl.js 给 token 打上 .t-xxx 类。
