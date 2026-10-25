@@ -684,7 +684,13 @@
     var out = [], para = [], i = 0;
 
     function flush() {
-      if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; }
+      if (!para.length) return;
+      // 段落内的换行直接断行（跟 AI 面板的渲染一致）。以前是合并成一个空格，
+      // 所以「行尾敲两个空格再回车」也没反应——那是 Markdown 的硬换行写法。
+      out.push("<p>" + para.map(function (l) {
+        return inline(l.replace(/\s+$/, ""));
+      }).join("<br>") + "</p>");
+      para = [];
     }
 
     while (i < lines.length) {
@@ -739,7 +745,7 @@
         while (i < lines.length && /^>\s?/.test(lines[i])) {
           q.push(lines[i].replace(/^>\s?/, "")); i++;
         }
-        out.push("<blockquote><p>" + inline(q.join(" ")) + "</p></blockquote>");
+        out.push("<blockquote><p>" + q.map(inline).join("<br>") + "</p></blockquote>");
         continue;
       }
 
@@ -763,7 +769,7 @@
         continue;
       }
 
-      para.push(line.trim());
+      para.push(line);
       i++;
     }
     flush();

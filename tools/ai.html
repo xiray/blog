@@ -610,7 +610,18 @@
   }
 
   function mdToHtml(md) {
-    var lines = String(md).replace(/\r\n?/g, "\n").split("\n");
+    // Agent 区块：藏掉标记行和 op/summary 这些头部字段，只把里面的正文当 markdown 渲染，
+    // 这样气泡里看到的是一段正常的改动内容，看不到机器格式。
+    var src = String(md).replace(
+      /\[\[\s*WRITER[\s-]*AGENT\s*\]\]([\s\S]*?)(?:\[\[\s*\/\s*WRITER[\s-]*AGENT\s*\]\]|$)/gi,
+      function (all, inner) {
+        var k = inner.search(/^[ \t]*-{3,}[ \t]*$/m);
+        var body = k >= 0 ? inner.slice(k).replace(/^[ \t]*-{3,}[ \t]*\n?/, "") : "";
+        body = body.replace(/^\s*\n+/, "").replace(/\s+$/, "");
+        return body ? "\n\n" + body + "\n\n" : "\n\n";
+      }
+    );
+    var lines = src.replace(/\r\n?/g, "\n").split("\n");
     var out = [];
     var i = 0;
 
@@ -810,28 +821,152 @@
       "5. {\"op\":\"new_post\"} 新建空白草稿\n\n" +
       "输出格式必须严格遵守：\n" +
       "- 先用一两句中文说清你打算怎么改；\n" +
-      "- 然后只输出一个 writer-agent 代码块，内容是一个 JSON 对象：\n" +
-      "```writer-agent\n" +
-      "{\"summary\":\"一句话说明\",\"actions\":[{\"op\":\"append_md\",\"md\":\"…\"}]}\n" +
-      "```\n" +
-      "- 除这一个块之外不要输出别的代码块，JSON 里不要写注释；\n" +
+      "- 然后另起一行写 [[WRITER-AGENT]]，接着逐行写头部字段，写一行 --- 之后原样写 Markdown 正文，" +
+      "最后另起一行写 [[/WRITER-AGENT]]。\n" +
+      "  示例：\n" +
+      "[[WRITER-AGENT]]\n" +
+      "op: append_md\n" +
+      "summary: 补一节讲时间复杂度\n" +
+      "---\n" +
+      "## 时间复杂度\n" +
+      "\n" +
+      "每层递归处理 n 个字符，共 n 层，所以是 O(n²)。\n" +
+      "[[/WRITER-AGENT]]\n" +
+      "- 这个区块**不要**用代码块包起来，**不要**用 JSON；正文里的 ``` 代码块照常写，不会和它冲突；\n" +
+      "- 正文里引号、反斜杠、箭头、缩进都原样写，不需要任何转义；\n" +
+      "- op 只能是 append_md（末尾追加）/ replace_md（整篇重写）/ set_meta（改标题等）/ " +
+      "open_post（换一篇来改）/ new_post（新建空白草稿）；\n" +
+      "- set_meta 在 --- 前面写要改的字段：title / excerpt / category / slug / date；不需要正文就省掉 --- ；\n" +
+      "- open_post 只写 slug: xxx；new_post 只写 op: new_post；\n" +
       "- 只动用户要求的那部分，不要顺手删他原来的内容；\n" +
       "- 不要自己发布、推送、删文章——改完等用户点「应用」。";
   }
 
-  function parseAgentBlock(text) {
-    var s = String(text || ""), raw = "";
-    var m = s.match(/```(?:writer-agent|writer|agent)\s*\n([\s\S]*?)```/i);
-    if (m) raw = m[1];
-    if (!raw) {
-      var m2 = s.match(/\{[\s\S]*"actions"[\s\S]*\}/);
-      if (m2) raw = m2[0];
+  /* 解析（新格式：头部 key: value + --- + 正文原样） ---------------------
+     以前要求模型输出 JSON，但代码里全是引号、反斜杠、换行，模型经常转义错，
+     于是「Agent 输出的 JSON 没解析成功」——所以改成不用转义的纯文本格式，
+     同时保留对旧 JSON 的兼容和兜底修复。 */
+
+  function parseAgentKv(src) {
+    var lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+    var head = {}, body = [], inBody = false, seen = 0;
+    lines.forEach(function (l) {
+      if (!inBody) {
+        if (/^\s*-{3,}\s*$/.test(l)) { inBody = true; return; }
+        var m = l.match(/^\s*([A-Za-z_][\w-]*)\s*[:：]\s*(.*)$/);
+        if (m) { head[m[1].toLowerCase()] = m[2].trim(); seen++; return; }
+        if (!l.trim() && !seen) return;        // 头部之前的空行，忽略
+        inBody = true;                          // 头部到此结束，剩下的都是正文
+        body.push(l);
+        return;
+      }
+      body.push(l);
+    });
+
+    var md = body.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
+    var op = String(head.op || "").toLowerCase().replace(/[\s-]+/g, "_");
+    if (!op) {
+      if (head.slug) op = "open_post";
+      else if (md) op = "replace_md";
+      else if (head.title || head.excerpt || head.category) op = "set_meta";
+      else if (head.new_post !== undefined) op = "new_post";
     }
-    if (!raw) return null;
-    raw = raw.trim();
-    try { return JSON.parse(raw); } catch (e) {}
-    try { return JSON.parse(raw.replace(/,\s*([}\]])/g, "$1")); } catch (e) {}
-    return { __bad: true };
+    if (!op) return null;
+
+    var a = { op: op, summary: head.summary || head.note || "" };
+    ["title", "excerpt", "category", "slug", "date"].forEach(function (k) {
+      if (head[k]) a[k] = head[k];
+    });
+    if (md) a.md = md;
+    if ((op === "append_md" || op === "replace_md") && !a.md) return null;
+    if (op === "open_post" && !a.slug) return null;
+    return a;
+  }
+
+  // JSON 兜底：模型偶尔还是给 JSON，或者给一段被转义坏的 JSON
+  function parseJsonLoose(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return null;
+    var cands = [s];
+    var i = s.indexOf("{"), j = s.lastIndexOf("}");
+    if (i >= 0 && j > i) cands.push(s.slice(i, j + 1));
+
+    function noTrail(t) { return t.replace(/,\s*([}\]])/g, "$1"); }
+    // 字符串里的裸换行/制表符转义掉；非法转义（\d \. \s 之类）补一个反斜杠
+    function fixEsc(t) {
+      var out = "", inStr = false, escNext = false;
+      for (var k = 0; k < t.length; k++) {
+        var ch = t.charAt(k);
+        if (escNext) { escNext = false; out += ch; continue; }
+        if (ch === "\\") {
+          var nx = t.charAt(k + 1);
+          if (!inStr) { out += ch; escNext = true; continue; }
+          if (nx && '"\\/bfnrtu'.indexOf(nx) >= 0) { out += ch; escNext = true; }
+          else { out += "\\\\"; }
+          continue;
+        }
+        if (ch === '"') { inStr = !inStr; out += ch; continue; }
+        if (inStr && (ch === "\n" || ch === "\r" || ch === "\t")) {
+          out += ch === "\t" ? "\\t" : "\\n";
+          continue;
+        }
+        out += ch;
+      }
+      return out;
+    }
+
+    for (var c = 0; c < cands.length; c++) {
+      var tries = [cands[c], noTrail(cands[c])];
+      tries.push(fixEsc(cands[c]), fixEsc(noTrail(cands[c])),
+        fixEsc(noTrail(cands[c]).replace(/[\u201c\u201d]/g, '"')));
+      for (var t = 0; t < tries.length; t++) {
+        try { return JSON.parse(tries[t]); } catch (e) {}
+      }
+    }
+    return null;
+  }
+
+  function parseAgentPlan(text) {
+    var s = String(text || ""), m;
+    var acts = [], summary = "";
+
+    // 1) 新格式
+    var re = /\[\[\s*WRITER[\s-]*AGENT\s*\]\]([\s\S]*?)(?:\[\[\s*\/\s*WRITER[\s-]*AGENT\s*\]\]|$)/gi;
+    while ((m = re.exec(s))) {
+      var a = parseAgentKv(m[1]);
+      if (a) { if (!summary && a.summary) summary = a.summary; acts.push(a); }
+    }
+    if (acts.length) return { actions: acts, summary: summary };
+
+    // 2) 旧格式：```writer-agent + JSON
+    var raws = [];
+    var fre = /```(?:writer-agent|writer|agent)\s*\n([\s\S]*?)```/gi;
+    while ((m = fre.exec(s))) raws.push(m[1]);
+    if (!raws.length) {
+      var j = s.match(/\{[\s\S]*"actions"[\s\S]*\}/);
+      if (j) raws.push(j[0]);
+    }
+    raws.forEach(function (raw) {
+      var t = String(raw).trim();
+      // 以 { 开头的基本都是旧 JSON，先按 JSON 解析；解析不出来的再交给 KV
+      if (t.charAt(0) === "{") {
+        var plan = parseJsonLoose(t);
+        if (plan && Array.isArray(plan.actions)) {
+          if (!summary && plan.summary) summary = plan.summary;
+          plan.actions.forEach(function (x) { if (x && x.op) acts.push(x); });
+          return;
+        }
+      }
+      var kv = parseAgentKv(raw);
+      if (kv) {
+        if (!summary && kv.summary) summary = kv.summary;
+        acts.push(kv);
+      }
+    });
+    if (acts.length) return { actions: acts, summary: summary };
+
+    if (raws.length || /\[\[\s*WRITER[\s-]*AGENT\s*\]\]/i.test(s)) return { bad: true };
+    return null;
   }
 
   function humanizeOp(a) {
@@ -853,13 +988,34 @@
   }
 
   function buildAgentCard(m) {
-    var plan = parseAgentBlock(m.content);
+    var plan = parseAgentPlan(m.content);
     if (!plan) return null;
-    if (plan.__bad) {
+    if (plan.bad) {
       var bad = document.createElement("div");
       bad.className = "agent-card";
-      bad.innerHTML = '<div class="hd">Agent 输出的 JSON 没解析成功</div>' +
-        '<div class="ops">可以让它「重新用 writer-agent 格式输出一次」。</div>';
+      var bhd = document.createElement("div");
+      bhd.className = "hd";
+      bhd.textContent = "这次的格式没读懂，没能生成可应用的改动";
+      bad.appendChild(bhd);
+      var bops = document.createElement("div");
+      bops.className = "ops";
+      bops.textContent = "可以让它按 writer-agent 格式重发一次（正文里的引号和反斜杠不用转义）。";
+      bad.appendChild(bops);
+      var bft = document.createElement("div");
+      bft.className = "ft";
+      var again = document.createElement("button");
+      again.className = "go";
+      again.textContent = "让它重来一次";
+      again.addEventListener("click", function () {
+        if (busy) return;
+        again.disabled = true;
+        el.input.value = "上一条的格式没读懂。请严格按 [[WRITER-AGENT]] … [[/WRITER-AGENT]] 的格式重新输出一次，" +
+          "正文原样写、不要转义、不要用 JSON。";
+        autoGrow();
+        send();
+      });
+      bft.appendChild(again);
+      bad.appendChild(bft);
       return bad;
     }
     var acts = Array.isArray(plan.actions) ? plan.actions : [];
