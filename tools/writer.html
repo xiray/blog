@@ -703,7 +703,11 @@
         // ```cpp 里的语言名要留下来：渲染时给代码块上色、右上角显示角标，
         // 转回 Markdown 时也要原样写回去，不然改一次代码块语言就丢了。
         var fence = line.trim().slice(3).trim();
-        var lang = (fence.split(/\s+/)[0] || "").replace(/[^\w+#.-]/g, "").toLowerCase();
+        var langRaw = fence.split(/\s+/)[0] || "";
+        // 语言名原样保留（py / cpp / txt / 自选的都行，中文也留着），
+        // 只去掉不可能是语言名的字符；真正的解释交给 hl.js 的 aliases
+        var lang = window.HL ? HL.cleanLangName(langRaw)
+                             : langRaw.replace(/[^\w+#.\u4e00-\u9fa5-]/g, "").toLowerCase();
         var buf = []; i++;
         while (i < lines.length && !/^```/.test(lines[i].trim())) { buf.push(lines[i]); i++; }
         i++;
@@ -876,10 +880,11 @@
         if (!plang) {
           var pcls = (node.getAttribute("class") || "") + " " +
                      (codeEl ? (codeEl.getAttribute("class") || "") : "");
-          var plm = pcls.match(/language-([\w+#.-]+)/i);
+          var plm = pcls.match(/language-([\w+#.\u4e00-\u9fa5-]+)/i);
           if (plm) plang = plm[1];
         }
-        plang = plang.replace(/[^\w+#.-]/g, "").toLowerCase();
+        plang = window.HL ? HL.cleanLangName(plang)
+                          : plang.replace(/[^\w+#.\u4e00-\u9fa5-]/g, "").toLowerCase();
         return "\n```" + plang + "\n" + raw + "\n```\n\n";
       }
       case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {

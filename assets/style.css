@@ -574,45 +574,49 @@ body {
 #mdPreview pre[data-lang] { padding-top: 1.75rem; }
 
 /* ---------------- 语法高亮配色 ----------------
-   由 assets/hl.js 给 token 打上 .t-xxx 类。深色/浅色两套，
-   原则是「低饱和、分得清」，不抢正文。 */
+   由 assets/hl.js 给 token 打上 .t-xxx 类。
+   配色跟 GitHub 自家的代码高亮对齐（dark / light 两套）：
+   关键字红、字符串浅蓝、数字蓝、函数紫、类型橙、类名绿、注释灰 —— 
+   这样从 GitHub 复制过来的观感是一致的。 */
 :root {
-  --hl-com: #6f7b8a;
-  --hl-str: #9fcf7e;
-  --hl-num: #e6a273;
-  --hl-kw: #c294e8;
-  --hl-typ: #6fc3d8;
-  --hl-fn: #ffd479;
-  --hl-pre: #ff9a76;
-  --hl-op: #93a1b1;
-  --hl-pun: #7c8794;
-  --hl-dec: #ffb86b;
-  --hl-var: #eeb189;
-  --hl-key: #8fb8ff;
-  --hl-tag: #ff8f7a;
-  --hl-attr: #ffd479;
-  --hl-sel: #9fcf7e;
-  --hl-meta: #6f7b8a;
+  --hl-kw: #ff7b72;    /* 关键字 */
+  --hl-str: #a5d6ff;   /* 字符串 */
+  --hl-com: #8b949e;   /* 注释 */
+  --hl-num: #79c0ff;   /* 数字 / 布尔 / 常量 */
+  --hl-fn: #d2a8ff;    /* 函数名 */
+  --hl-typ: #ffa657;   /* 类型 / 内置类型 */
+  --hl-cls: #7ee787;   /* 类名 / 枚举 */
+  --hl-var: #ffa198;   /* 变量 / 属性 / 内置函数 */
+  --hl-pre: #ff9bce;   /* 预处理指令 / 宏 */
+  --hl-dec: #d2a8ff;   /* 注解 / 装饰器 */
+  --hl-op: #a5b3c2;    /* 运算符 */
+  --hl-pun: #a5b3c2;   /* 标点 */
+  --hl-key: #79c0ff;   /* JSON 键 / 对象属性 */
+  --hl-tag: #7ee787;   /* HTML 标签 */
+  --hl-attr: #79c0ff;  /* HTML 属性名 */
+  --hl-sel: #d2a8ff;   /* CSS 选择器 */
+  --hl-meta: #8b949e;  /* doctype / diff 头 */
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --hl-com: #79808a;
-    --hl-str: #1f6b33;
-    --hl-num: #8f4408;
-    --hl-kw: #6e2199;
-    --hl-typ: #0a5b74;
-    --hl-fn: #7a4a00;
-    --hl-pre: #97284a;
-    --hl-op: #47505a;
-    --hl-pun: #666d76;
-    --hl-dec: #9c4400;
-    --hl-var: #8f4408;
-    --hl-key: #1f4a8f;
-    --hl-tag: #97284a;
-    --hl-attr: #7a4a00;
-    --hl-sel: #1f6b33;
-    --hl-meta: #79808a;
+    --hl-kw: #cf222e;
+    --hl-str: #0a3069;
+    --hl-com: #6e7781;
+    --hl-num: #0550ae;
+    --hl-fn: #8250df;
+    --hl-typ: #953800;
+    --hl-cls: #116329;
+    --hl-var: #bc4c00;
+    --hl-pre: #cf222e;
+    --hl-dec: #8250df;
+    --hl-op: #3b434b;
+    --hl-pun: #4b5563;
+    --hl-key: #0550ae;
+    --hl-tag: #116329;
+    --hl-attr: #0550ae;
+    --hl-sel: #8250df;
+    --hl-meta: #6e7781;
   }
 }
 
@@ -621,6 +625,7 @@ pre .t-str { color: var(--hl-str); }
 pre .t-num { color: var(--hl-num); }
 pre .t-kw  { color: var(--hl-kw); }
 pre .t-typ { color: var(--hl-typ); }
+pre .t-cls { color: var(--hl-cls); }
 pre .t-fn  { color: var(--hl-fn); }
 pre .t-pre { color: var(--hl-pre); }
 pre .t-op  { color: var(--hl-op); }
@@ -632,11 +637,11 @@ pre .t-tag { color: var(--hl-tag); }
 pre .t-attr { color: var(--hl-attr); }
 pre .t-sel { color: var(--hl-sel); }
 pre .t-meta { color: var(--hl-meta); }
-pre .t-bi  { color: var(--hl-typ); }
-pre .t-h   { color: var(--hl-fn); font-weight: 700; }
+pre .t-bi  { color: var(--hl-var); }
+pre .t-h   { color: var(--hl-kw); font-weight: 700; }
 pre .t-quote { color: var(--hl-str); }
 pre .t-li  { color: var(--hl-kw); }
-pre .t-bold { color: var(--hl-fn); font-weight: 700; }
+pre .t-bold { color: var(--hl-typ); font-weight: 700; }
 pre .t-fence, pre .t-hr { color: var(--hl-com); }
 
 .prose hr {
