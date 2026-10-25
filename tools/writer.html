@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/assets/style.css">
 <script>window.__HL_MANUAL__ = true;</script>
 <script src="/assets/hl.js"></script>
+<script src="/assets/ai-lang.js"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -1194,6 +1195,7 @@
     if (!raw) return;
     HL.paint(code, raw, HL.langOf(pre, code));
     pre.classList.add("hl-on");
+    if (HL.guides) HL.guides(pre);
   }
 
   function unpaintPre(pre) {
@@ -1208,6 +1210,7 @@
     var box = root || el.rich;
     if (!box || !box.querySelectorAll) return;
     Array.prototype.forEach.call(box.querySelectorAll("pre"), paintPre);
+    if (!root) autoLangRich();
   }
 
   function unpaintAll(root) {
@@ -1278,6 +1281,30 @@
   function renderMdPreview() {
     el.mdPreview.innerHTML = mdToHtml(el.md.value);
     if (window.HL) HL.run(el.mdPreview);
+    autoLangMd();
+  }
+
+  /* 没写 ```语言 的代码块，交给服务端的模型认一次；认出来就补 data-lang，
+     角标和配色立刻跟上，转回 Markdown / 发布时也带着这个语言。 */
+  function autoLangMd() {
+    if (!window.AILang) return;
+    AILang.debounced(el.mdPreview, {
+      key: "md",
+      onApplied: function (pres) {
+        for (var i = 0; i < pres.length; i++) {
+          var pre = pres[i];
+          if (pre.getAttribute("data-lang") && !pre.getAttribute("data-hl")) {
+            var code = pre.querySelector("code") || pre;
+            if (window.HL) { HL.paint(code, code.textContent, HL.langOf(pre, code)); pre.setAttribute("data-hl", "1"); }
+          }
+        }
+      }
+    }, 1200);
+  }
+
+  function autoLangRich() {
+    if (!window.AILang) return;
+    AILang.debounced(el.rich, { key: "rich", onApplied: function () { paintAll(); } }, 1500);
   }
 
   /* ============================================ 工具栏 */

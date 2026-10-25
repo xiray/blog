@@ -13,7 +13,8 @@
   --muted: #8b949f;
   --accent: #ffb86b;
   --accent-dim: #d99a52;
-  --code-bg: #14181d;
+  --code-bg: #121314;      /* 跟 VS Code 编辑器一个底色 */
+  --code-line: #2a2b2c;
 
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
     "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
@@ -40,7 +41,8 @@
     --muted: #6d757f;
     --accent: #b4530a;
     --accent-dim: #8f3f06;
-    --code-bg: #f2eee7;
+    --code-bg: #ffffff;
+    --code-line: #e5e5e5;
   }
 }
 
@@ -531,14 +533,22 @@ body {
 }
 
 .prose pre {
-  background: var(--code-bg);
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 1.125rem 1.25rem;
+  --code-pad-x: 1.25rem;
+  background-color: var(--code-bg);
+  border: 1px solid var(--code-line);
+  border-radius: 6px;
+  padding: 1.125rem var(--code-pad-x);
   overflow-x: auto;
   font-size: 0.875rem;
   line-height: 1.7;
   position: relative;
+}
+
+/* 缩进参考线由 hl.js 的 HL.guides() 用 px 精确画（CSS 的 ch 单位跟伪元素叠加时
+   相位对不准，会整体偏几个字符）。这里只留颜色和字宽。 */
+.prose pre,
+.code-wrap pre {
+  --guide-w: 4ch;
 }
 
 .prose pre code {
@@ -550,10 +560,11 @@ body {
 }
 
 /* 右上角的语言角标：来自 <pre data-lang="cpp">，由 hl.js 自动补上。
-   纯装饰，不参与选中/复制（user-select:none）。 */
-.prose pre[data-lang]::before,
-#richEditor pre[data-lang]::before,
-#mdPreview pre[data-lang]::before {
+   纯装饰，不参与选中/复制（user-select:none）。
+   注意用的是 ::after —— ::before 已经被缩进参考线占了。 */
+.prose pre[data-lang]::after,
+#richEditor pre[data-lang]::after,
+#mdPreview pre[data-lang]::after {
   content: attr(data-lang);
   position: absolute;
   top: 0.4rem;
@@ -575,57 +586,56 @@ body {
 
 /* ---------------- 语法高亮配色 ----------------
    由 assets/hl.js 给 token 打上 .t-xxx 类。
-   配色跟 GitHub 自家的代码高亮对齐（dark / light 两套）：
-   关键字红、字符串浅蓝、数字蓝、函数紫、类型橙、类名绿、注释灰 —— 
-   这样从 GitHub 复制过来的观感是一致的。 */
+   色值全部从 VS Code 里那段 C++ 截图上采下来的（背景 #121314）：
+   声明/类型珊瑚红、控制流与预处理藕紫、函数名淡紫、方法调用橙、
+   字符串浅蓝、数字灰绿、括号黄、标点近白。 */
 :root {
-  --hl-kw: #ff3d6e;    /* 关键字 —— 荧光红 */
-  --hl-str: #5cf2a4;   /* 字符串 —— 荧光绿 */
-  --hl-com: #7f8fa6;   /* 注释 —— 唯一保持低饱和的，压住整体 */
-  --hl-num: #ffb84d;   /* 数字 / 布尔 / 常量 —— 琥珀 */
-  --hl-fn: #c77dff;    /* 函数名 —— 紫 */
-  --hl-typ: #22d3ee;   /* 类型 / 内置类型 —— 青 */
-  --hl-cls: #ffe45c;   /* 类名 / 枚举 —— 亮黄 */
-  --hl-var: #ff7eb6;   /* 变量 / 属性 / 内置函数 —— 粉 */
-  --hl-pre: #ff4fd8;   /* 预处理指令 / 宏 —— 品红 */
-  --hl-dec: #ffcc33;   /* 注解 / 装饰器 —— 金 */
-  --hl-op: #ff9a5c;    /* 运算符 —— 橙 */
-  --hl-pun: #c3cee0;   /* 标点 */
-  --hl-key: #6fd6ff;   /* JSON 键 / 对象属性 —— 天蓝 */
-  --hl-tag: #ff6b6b;   /* HTML 标签 —— 珊瑚红 */
-  --hl-attr: #ffd84d;  /* HTML 属性名 —— 亮黄 */
-  --hl-sel: #a3ff7a;   /* CSS 选择器 —— 黄绿 */
-  --hl-meta: #93a4ba;  /* doctype / diff 头 */
+  --hl-kw: #f47b6f;    /* 声明 / 类型 / 修饰符 */
+  --hl-ctl: #c186c1;   /* 控制流 if/for/return —— VS Code 跟声明是两种颜色 */
+  --hl-pre: #c186c1;   /* 预处理指令 / 宏 */
+  --hl-typ: #65c9b0;   /* 类型 / 类名 */
+  --hl-cls: #65c9b0;   /* 类名 / 枚举 */
+  --hl-var: #65c9b0;   /* 变量 / 内置函数 */
+  --hl-fn: #d1a9ff;    /* 函数定义 */
+  --hl-call: #f6a64f;  /* 方法调用 obj.method() */
+  --hl-str: #aed6ff;   /* 字符串 / 头文件 */
+  --hl-num: #b7cea6;   /* 数字 / 常量 */
+  --hl-op: #d4d4d4;    /* 运算符 */
+  --hl-pun: #cad1d9;   /* 标点 ; , . : */
+  --hl-br: #f8d700;    /* 括号 (){}[] —— VS Code 那套括号着色 */
+  --hl-com: #6a737d;   /* 注释 */
+  --hl-key: #aed6ff;   /* JSON 键 / 对象属性 */
+  --hl-tag: #f47b6f;   /* HTML 标签 */
+  --hl-attr: #65c9b0;  /* HTML 属性名 */
+  --hl-sel: #f6a64f;   /* CSS 选择器 */
+  --hl-meta: #6a737d;  /* doctype / diff 头 */
+  --hl-dec: #d1a9ff;   /* 注解 / 装饰器 */
+  --guide: rgba(255, 255, 255, 0.055); /* 缩进参考线 */
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --hl-kw: #d40a55;
-    --hl-str: #087a35;
-    --hl-com: #6b747e;
-    --hl-num: #b8500a;
-    --hl-fn: #6d13d4;
-    --hl-typ: #0362b0;
-    --hl-cls: #0a6b72;
-    --hl-var: #b31b6f;
-    --hl-pre: #a0159e;
-    --hl-dec: #8a13b8;
-    --hl-op: #2f3c4c;
-    --hl-pun: #46525f;
-    --hl-key: #0b56c4;
-    --hl-tag: #b81636;
-    --hl-attr: #9a5b00;
-    --hl-sel: #4d7c0f;
-    --hl-meta: #5f6b78;
-  }
-}
-
-/* 深色下给高饱和颜色一点点辉光，观感更"亮"，但不影响清晰度 */
-@media (prefers-color-scheme: dark) {
-  pre .t-kw, pre .t-pre, pre .t-str, pre .t-fn,
-  pre .t-typ, pre .t-cls, pre .t-var, pre .t-num,
-  pre .t-key, pre .t-tag, pre .t-attr, pre .t-sel {
-    text-shadow: 0 0 10px color-mix(in srgb, currentColor 34%, transparent);
+    --hl-kw: #b8372a;
+    --hl-ctl: #8e3f8e;
+    --hl-pre: #8e3f8e;
+    --hl-typ: #0f7a6a;
+    --hl-cls: #0f7a6a;
+    --hl-var: #0f7a6a;
+    --hl-fn: #6b3fa0;
+    --hl-call: #a05a00;
+    --hl-str: #16537e;
+    --hl-num: #4a6b2f;
+    --hl-op: #24292f;
+    --hl-pun: #3b4249;
+    --hl-br: #8a6d00;
+    --hl-com: #6e7781;
+    --hl-key: #16537e;
+    --hl-tag: #b8372a;
+    --hl-attr: #0f7a6a;
+    --hl-sel: #a05a00;
+    --hl-meta: #6e7781;
+    --hl-dec: #6b3fa0;
+    --guide: rgba(0, 0, 0, 0.07);
   }
 }
 
@@ -633,12 +643,15 @@ pre .t-com { color: var(--hl-com); font-style: italic; }
 pre .t-str { color: var(--hl-str); }
 pre .t-num { color: var(--hl-num); }
 pre .t-kw  { color: var(--hl-kw); }
+pre .t-ctl { color: var(--hl-ctl); }
 pre .t-typ { color: var(--hl-typ); }
 pre .t-cls { color: var(--hl-cls); }
 pre .t-fn  { color: var(--hl-fn); }
+pre .t-call { color: var(--hl-call); }
 pre .t-pre { color: var(--hl-pre); }
 pre .t-op  { color: var(--hl-op); }
 pre .t-pun { color: var(--hl-pun); }
+pre .t-br  { color: var(--hl-br); }
 pre .t-dec { color: var(--hl-dec); }
 pre .t-var { color: var(--hl-var); }
 pre .t-key { color: var(--hl-key); }
@@ -647,10 +660,10 @@ pre .t-attr { color: var(--hl-attr); }
 pre .t-sel { color: var(--hl-sel); }
 pre .t-meta { color: var(--hl-meta); }
 pre .t-bi  { color: var(--hl-var); }
-pre .t-h   { color: var(--hl-kw); font-weight: 700; }
+pre .t-h   { color: var(--hl-call); font-weight: 700; }
 pre .t-quote { color: var(--hl-str); }
-pre .t-li  { color: var(--hl-kw); }
-pre .t-bold { color: var(--hl-typ); font-weight: 700; }
+pre .t-li  { color: var(--hl-ctl); }
+pre .t-bold { color: var(--hl-kw); font-weight: 700; }
 pre .t-fence, pre .t-hr { color: var(--hl-com); }
 
 .prose hr {

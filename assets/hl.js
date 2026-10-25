@@ -306,7 +306,31 @@
     return "generic";        // 自选语言名：用通用规则，总比一片灰强
   }
 
-  /* ---------------- 分词 ---------------- */
+  /* ---------------- 分词 ----------------
+     VS Code 把「控制流」和「声明」分两种颜色、方法调用和函数定义分两种颜色、
+     括号单独一色。规则表里没必要为每个语言各写一遍，分词完再按内容/上下文改判一次即可。 */
+  var CONTROL_KW = /^(?:if|else|elif|elseif|for|foreach|while|do|switch|case|default|break|continue|return|goto|try|catch|except|finally|throw|raise|yield|await|defer|go|select|when|match|loop|until|fi|then|esac|done|in|as|not|and|or|is|lambda|assert|del|pass|with|new|delete)$/;
+  var BRACKET = "(){}[]";
+
+  function reclassify(out) {
+    for (var i = 0; i < out.length; i++) {
+      var t = out[i];
+      if (!t.t) continue;
+      if (t.t === "kw" && CONTROL_KW.test(t.s)) { t.t = "ctl"; continue; }
+      if (t.t === "pun" && t.s.length === 1 && BRACKET.indexOf(t.s) >= 0) { t.t = "br"; continue; }
+      if (t.t === "fn") {
+        // 前面隔着空白是 . 或 -> 就说明是方法调用（VS Code 里调用和定义不同色）
+        var j = i - 1;
+        while (j >= 0 && !out[j].s.trim()) j--;
+        if (j >= 0) {
+          var prev = out[j].s;
+          if (/[.]$/.test(prev) || /->$/.test(prev)) t.t = "call";
+        }
+      }
+    }
+    return out;
+  }
+
   function tokens(text, lang) {
     var s = String(text == null ? "" : text);
     var L = normLang(lang);
@@ -331,7 +355,56 @@
       if (c.rx.lastIndex <= m.index) i = m.index + 1; // 防零宽死循环
     }
     if (i < s.length) out.push({ t: "", s: s.slice(i) });
-    return out;
+    return reclassify(out);
+  }
+
+  /* ---------------- 缩进参考线（VS Code 那几条竖线） ----------------
+     CSS 的 repeating-gradient + ch 单位跟伪元素的定位叠加时相位算不准，
+     实测会整体偏 3 个字符；这里直接用实测字宽算出每根线的 px 位置，
+     一次 linear-gradient 画完，位置绝对准。 */
+  var CW_CACHE = {};
+  function charWidth(el) {
+    var cs = window.getComputedStyle(el);
+    var key = cs.fontFamily + "|" + cs.fontSize + "|" + cs.letterSpacing;
+    if (CW_CACHE[key]) return CW_CACHE[key];
+    var probe = document.createElement("span");
+    probe.textContent = "0000000000";
+    probe.style.cssText = "position:absolute;left:-9999px;top:0;white-space:pre;" +
+      "font-family:" + cs.fontFamily + ";font-size:" + cs.fontSize +
+      ";letter-spacing:" + cs.letterSpacing;
+    document.body.appendChild(probe);
+    var w = probe.getBoundingClientRect().width / 10;
+    if (probe.parentNode) probe.parentNode.removeChild(probe);
+    return (CW_CACHE[key] = w);
+  }
+
+  function guides(pre) {
+    if (!pre || !window.getComputedStyle) return;
+    var cs = window.getComputedStyle(pre);
+    var cw = charWidth(pre);
+    if (!cw) return;
+    var x0 = parseFloat(cs.paddingLeft) || 0;
+    var step = cw * 4;
+    var color = (cs.getPropertyValue("--guide") || "").trim() ||
+                "rgba(255,255,255,0.055)";
+    var width = pre.clientWidth;
+    var stops = [];
+    for (var x = x0 + step; x < width - 4; x += step) {
+      stops.push("transparent " + (x - 0.5) + "px",
+                 color + " " + (x - 0.5) + "px",
+                 color + " " + (x + 0.5) + "px",
+                 "transparent " + (x + 0.5) + "px");
+    }
+    pre.style.backgroundImage = stops.length
+      ? "linear-gradient(to right, transparent 0px, " + stops.join(", ") + ")"
+      : "";
+  }
+
+  function guidesAll(root) {
+    var box = root || document;
+    if (!box.querySelectorAll) return;
+    var list = box.querySelectorAll("pre");
+    for (var i = 0; i < list.length; i++) guides(list[i]);
   }
 
   /* ---------------- 没写语言时保守推断 ---------------- */
@@ -413,8 +486,8 @@
       if (!pre || pre.getAttribute("data-hl") === "1") continue;
       pre.setAttribute("data-hl", "1");
       var lang = langOf(pre, code);
-      if (lang === "text") continue;
-      paint(code, code.textContent, lang);
+      if (lang !== "text") paint(code, code.textContent, lang);
+      guides(pre);
     }
   }
 
@@ -422,6 +495,8 @@
     tokens: tokens,
     paint: paint,
     run: run,
+    guides: guides,
+    guidesAll: guidesAll,
     langOf: langOf,
     guess: guess,
     normLang: normLang,
@@ -431,6 +506,15 @@
   };
 
   global.HL = HL;
+
+  /* 窗口一变宽窄，竖线的位置就得重算（每 200ms 最多算一次） */
+  var gTimer = null;
+  if (global.addEventListener) {
+    global.addEventListener("resize", function () {
+      if (gTimer) clearTimeout(gTimer);
+      gTimer = setTimeout(function () { gTimer = null; guidesAll(document); }, 200);
+    });
+  }
 
   /* 线上文章页：DOM 就绪后自动上色（写作台会关掉这个，自己控制时机） */
   if (!global.__HL_MANUAL__) {

@@ -7,6 +7,7 @@
 <meta name="color-scheme" content="dark light">
 <link rel="stylesheet" href="/assets/style.css">
 <script src="/assets/hl.js"></script>
+<script src="/assets/ai-lang.js"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -93,8 +94,10 @@
 
   .code-wrap { position: relative; margin: .7em 0; }
   .code-wrap pre {
-    margin: 0; background: var(--code-bg); border: 1px solid var(--line);
-    border-radius: 8px; padding: .8rem .9rem; overflow-x: auto;
+    --code-pad-x: .9rem;
+    position: relative;
+    margin: 0; background-color: var(--code-bg); border: 1px solid var(--code-line);
+    border-radius: 6px; padding: .8rem var(--code-pad-x); overflow-x: auto;
   }
   .code-wrap pre code {
     background: none; border: none; padding: 0; font-size: .8125rem;
@@ -1555,6 +1558,8 @@
         aiMsg.done = true;
         bodyEl.classList.remove("typing");
         setBusy(false);
+        // 回答里的代码块如果没标语言，让它自己认一下（流式结束了再问，避免反复请求）
+        if (window.AILang) AILang.detect(bodyEl);
         var secs = ((Date.now() - t0) / 1000).toFixed(1);
         if (aiMsg.content) {
           setStatus(messages.length / 2 + " 轮 · " + secs + " 秒", "ok");

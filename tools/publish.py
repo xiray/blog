@@ -19,6 +19,7 @@ xiray 博客写作台 —— 本地服务
 """
 
 import base64
+import html as htmllib
 import io
 import json
 import os
@@ -709,6 +710,12 @@ def publish(payload):
 
     existed = os.path.exists(src_path(slug))
 
+    # 没写语言的代码块，发布前让 AI 认一遍，把 data-lang 写进静态页
+    langs_done = 0
+    if payload.get("auto_lang", True):
+        set_progress("识别", "AI 判断没标语言的代码块")
+        body_html, langs_done = annotate_code_langs(body_html)
+
     set_progress("生成", "写入文章与首页列表")
 
     meta = {
@@ -735,7 +742,8 @@ def publish(payload):
     if not res.get("ok"):
         return res
     res.update({"url": "%s/posts/%s.html" % (SITE, slug),
-                "home": SITE + "/", "slug": slug, "existed": existed})
+                "home": SITE + "/", "slug": slug, "existed": existed,
+                "langs_detected": langs_done})
     return res
 
 
@@ -1023,6 +1031,153 @@ def ai_list_models(cfg):
     return ids
 
 
+# ---------------------------------------------------------------- 代码语言识别
+# 没写 ```` ``` ```` 语言时，让模型看一眼代码自己判断 —— 比 hl.js 里那套正则猜准得多，
+# 尤其是「看着像但其实是别的语言」的情况（Java 和 C++、TS 和 JS）。
+
+DETECT_MAX_BLOCKS = 6          # 一次最多问这么多块，控制延迟和花费
+DETECT_MAX_CHARS = 1400        # 每块只取前面这么多字符，够判断了
+DETECT_TAGS = ["cpp", "c", "java", "python", "javascript", "typescript", "go",
+               "rust", "html", "css", "json", "yaml", "sql", "shell",
+               "markdown", "text"]
+
+DETECT_SYS = (
+    "你是代码语言识别器。用户会给出若干段代码，你要判断每一段是什么语言。\n"
+    "只输出一个 JSON 数组，长度必须与段数相同，元素只能是下面这些 id 之一：\n"
+    + ", ".join(DETECT_TAGS) + "。\n"
+    "规则：\n"
+    "- 不是代码（自然语言、命令行输出、日志、纯文本）一律用 \"text\"；\n"
+    "- 命令行 / shell 会话用 \"shell\"；HTML 里的 CSS 片段用 \"css\"；\n"
+    "- 判断不出来也用 \"text\"，不要瞎猜；\n"
+    "- 不要输出解释、不要 markdown 代码块、不要对象，只要 JSON 数组。"
+)
+
+
+def _clean_lang(s):
+    s = str(s or "").strip().lower()
+    s = s.strip("`'\" ")
+    s = re.sub(r"[^0-9a-z+#.\-\u4e00-\u9fa5]", "", s)
+    s = s.strip(".")
+    return s[:20] or "text"
+
+
+def _parse_lang_array(text, expect):
+    """模型偶尔会包 ```json 或者多说话，这里尽量把它想要的数组捞出来。"""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+    a, b = t.find("["), t.rfind("]")
+    if a >= 0 and b > a:
+        try:
+            arr = json.loads(t[a:b + 1])
+            if isinstance(arr, list):
+                out = [_clean_lang(x) for x in arr][:expect]
+                while len(out) < expect:
+                    out.append("text")
+                return out
+        except Exception:
+            pass
+    got = re.findall(r"[\"'`]([a-zA-Z+#.0-9_-]{1,20})[\"'`]", t)
+    out = [_clean_lang(x) for x in got][:expect]
+    while len(out) < expect:
+        out.append("text")
+    return out
+
+
+def ai_detect_langs(codes):
+    """返回 {"ok":bool, "langs":[...]}；没配 key 时 ok=False + need_config。"""
+    codes = [str(c or "")[:DETECT_MAX_CHARS] for c in (codes or [])
+             if str(c or "").strip()][:DETECT_MAX_BLOCKS]
+    if not codes:
+        return {"ok": True, "langs": []}
+
+    cfg = load_ai_config()
+    if not cfg["api_key"]:
+        return {"ok": False, "need_config": True, "langs": []}
+
+    parts = []
+    for i, c in enumerate(codes, 1):
+        parts.append("### 第 %d 段\n```\n%s\n```" % (i, c))
+    body = json.dumps({
+        "model": cfg["model"],
+        "messages": [
+            {"role": "system", "content": DETECT_SYS},
+            {"role": "user", "content": "\n\n".join(parts)},
+        ],
+        "temperature": 0,
+        "max_tokens": 120,
+        "stream": False,
+    }, ensure_ascii=False).encode("utf-8")
+
+    route, resp = ai_connect(cfg, "/chat/completions", data=body, timeout=60)
+    with resp:
+        raw = resp.read().decode("utf-8", "replace")
+    try:
+        obj = json.loads(raw)
+        content = obj["choices"][0]["message"]["content"]
+    except Exception:
+        raise AIError("识别接口返回了看不懂的内容", 0, route)
+    langs = _parse_lang_array(content, len(codes))
+    return {"ok": True, "langs": langs, "route": route}
+
+
+PRE_BLOCK = re.compile(r"<pre\b([^>]*)>(.*?)</pre>", re.S | re.I)
+
+
+def _html_text(s):
+    s = re.sub(r"<[^>]+>", "", s or "")
+    return htmllib.unescape(s)
+
+
+def annotate_code_langs(body_html):
+    """发布前把没标语言的代码块交给 AI 认一遍，结果写进 data-lang。
+    静态页面不需要再跑模型，读者打开就是带语言、带角标的高亮。
+    失败一律静默跳过（没配 key / 断网 / 模型抽风），不影响发布。"""
+    if not body_html or "<pre" not in body_html.lower():
+        return body_html, 0
+
+    targets = []
+    for m in PRE_BLOCK.finditer(body_html):
+        attrs, inner = m.group(1), m.group(2)
+        if "data-lang" in attrs or "language-" in attrs or "language-" in inner:
+            continue
+        text = _html_text(inner)
+        if len(text.strip()) < 12:
+            continue
+        targets.append((m, text))
+        if len(targets) >= DETECT_MAX_BLOCKS:
+            break
+    if not targets:
+        return body_html, 0
+
+    try:
+        res = ai_detect_langs([t[1] for t in targets])
+    except Exception:
+        return body_html, 0
+    langs = res.get("langs") or []
+    if not res.get("ok") or len(langs) < len(targets):
+        return body_html, 0
+
+    out, pos, done = [], 0, 0
+    for (m, _text), lang in zip(targets, langs):
+        if lang == "text":
+            continue
+        attrs, inner = m.group(1), m.group(2)
+        new_inner = inner
+        if re.search(r"<code\b", inner, re.I):
+            new_inner = re.sub(r"<code\b", '<code class="language-%s"' % lang,
+                               inner, count=1)
+        else:
+            new_inner = '<code class="language-%s">%s</code>' % (lang, inner)
+        out.append(body_html[pos:m.start()])
+        out.append('<pre%s data-lang="%s">%s</pre>' % (attrs, lang, new_inner))
+        pos = m.end()
+        done += 1
+    out.append(body_html[pos:])
+    return "".join(out), done
+
+
 def ai_chat(handler, payload):
     """流式转发上游的 SSE 给浏览器。每个事件都是一行 `data: {json}`。"""
     cfg = load_ai_config()
@@ -1248,6 +1403,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "config": save_ai_config(payload)})
             if path == "/api/ai/models":
                 return self._json(self._handle_ai_models(payload))
+            if path == "/api/ai/detect":
+                blocks = payload.get("blocks")
+                if not isinstance(blocks, list):
+                    return self._json({"ok": False, "error": "blocks 必须是数组"}, 400)
+                return self._json(ai_detect_langs(blocks))
             if path == "/api/ai/chat":
                 return ai_chat(self, payload)
         except AIError as e:
