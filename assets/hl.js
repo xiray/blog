@@ -358,23 +358,31 @@
     return reclassify(out);
   }
 
-  /* ---------------- 没写语言时保守推断 ---------------- */
+  /* ---------------- 没写语言时保守推断 ----------------
+     顺序很讲究：C 系的结构特征要排在 shell 前面，否则一段带 `&&`、
+     `->` 的 C++ 会被判成 shell（`&&` 在 C/JS/PHP 里到处都是，不能单独当证据）。 */
   function guess(s) {
     var t = String(s || "");
     if (!t.trim()) return "text";
-    if (/^[ \t]*#[ \t]*(?:include|define|pragma)\b/m.test(t) || /std::|#include\s*</.test(t)) return "cpp";
-    if (/System\.out\.print|public\s+static\s+void\s+main|^\s*(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?class\s/m.test(t)) return "java";
+    if (/^[ \t]*#[ \t]*(?:include|define|pragma|ifndef|ifdef)\b/m.test(t) || /std::|#include\s*</.test(t)) return "cpp";
+    if (/\bfn\s+\w+\s*[(<]|\blet\s+mut\b|\bimpl\s+\w+|\bpub\s+(?:fn|struct)\b/.test(t)) return "rust";
+    if (/System\.out\.print|public\s+static\s+void\s+main|\b(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?class\s+\w+/.test(t)) return "java";
+    /* C / C++ 的结构特征 */
+    if (/\b(?:public|private|protected)\s*:/.test(t) ||
+        /\b\w+\s*::\s*[~\w]/.test(t) ||
+        /\b(?:int|char|void|bool|double|float|long|unsigned|size_t|string|vector)\b[^;\n]{0,40}[*&]\s*\w+\s*[=;,)\[]/.test(t) ||
+        (/\w\s*->\s*\w/.test(t) && /;\s*$/m.test(t) && !/\bfunction\b|=>|\.\w+\s*\(/.test(t))) return "cpp";
     if (/^[ \t]*(?:def|class)\s+\w+|^[ \t]*(?:from\s+[\w.]+\s+)?import\s+[\w.]+/m.test(t) && !/\{[\s\S]*;\s*$/m.test(t)) return "py";
     if (/^\s*package\s+\w+\s*$/m.test(t) && /\bfunc\s+\w+\s*\(/.test(t)) return "go";
-    if (/\bfn\s+\w+\s*[(<]|\blet\s+mut\b|\bimpl\s+\w+/.test(t)) return "rust";
     if (/^diff --git |^@@ -\d+/m.test(t)) return "diff";
     if (/<!--|<\/[a-zA-Z][\w:-]*>/.test(t)) return "html";
     if (/^\s*[[{][\s\S]*"[^"]*"\s*:/.test(t) && !/[;()]/.test(t)) return "json";
     if (/\b(?:SELECT|FROM|WHERE|INSERT\s+INTO|UPDATE\s+\w+\s+SET)\b/i.test(t) &&
         /\b(?:SELECT|FROM|WHERE)\b/.test(t.toUpperCase())) return "sql";
-    if (/^\s*(?:\$ |# )?(?:npm|pnpm|yarn|git|sudo|cd|ls|mkdir|curl|wget|python3?|pip3?|node|go|cargo|make)\s/m.test(t) ||
-        /^#!\/(?:usr\/)?bin\/(?:ba|z)?sh/.test(t) ||
-        /(?:^|\s)(?:&&|\|\||2>&1|>\/dev\/null)/.test(t)) return "sh";
+    /* shell：只认行首的已知命令 / shebang / shell 独有写法，别拿 `&&` 当证据 */
+    if (/^#!\s*\S*\b(?:ba|z|da|k)?sh\b/.test(t) ||
+        /^[ \t]*(?:\$ |# )?(?:npm|pnpm|npx|yarn|git|sudo|cd|ls|ll|mkdir|rm|cp|mv|curl|wget|ssh|scp|tar|unzip|apt|apt-get|brew|docker|kubectl|systemctl|chmod|chown|export|source|python3?|pip3?|node|go|cargo|make|cmake|gcc|g\+\+|java|mvn|gradle)\s+\S/m.test(t) ||
+        /\|\s*(?:grep|awk|sed|head|tail|sort|uniq|xargs|tee)\b|2>&1|>\/dev\/null/.test(t)) return "sh";
     if (/\b(?:const|let|var)\s+[\w${]+\s*=|\bfunction\s*\w*\s*\(|=>\s*[{(]|console\.log\b/.test(t)) return "js";
     if (/^\s*(?:[.#][\w-]+|[a-z][\w-]*)\s*[,>]?[\s\S]*\{[^}]*[-a-z]+\s*:\s*[^;]+;/.test(t) &&
         !/\bfunction\b|=>/.test(t)) return "css";
