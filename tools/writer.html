@@ -6,6 +6,8 @@
 <title>写作台 — xiray</title>
 <meta name="color-scheme" content="dark light">
 <link rel="stylesheet" href="/assets/style.css">
+<script>window.__HL_MANUAL__ = true;</script>
+<script src="/assets/hl.js"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -698,10 +700,16 @@
 
       if (/^```/.test(line.trim())) {
         flush();
+        // ```cpp 里的语言名要留下来：渲染时给代码块上色、右上角显示角标，
+        // 转回 Markdown 时也要原样写回去，不然改一次代码块语言就丢了。
+        var fence = line.trim().slice(3).trim();
+        var lang = (fence.split(/\s+/)[0] || "").replace(/[^\w+#.-]/g, "").toLowerCase();
         var buf = []; i++;
         while (i < lines.length && !/^```/.test(lines[i].trim())) { buf.push(lines[i]); i++; }
         i++;
-        out.push("<pre><code>" + esc(buf.join("\n")) + "</code></pre>");
+        out.push("<pre" + (lang ? ' data-lang="' + lang + '"' : "") + "><code" +
+          (lang ? ' class="language-' + lang + '"' : "") + ">" +
+          esc(buf.join("\n")) + "</code></pre>");
         continue;
       }
 
@@ -863,7 +871,16 @@
       case "pre": {
         var codeEl = node.querySelector("code");
         var raw = preText(codeEl || node).replace(/^\n+|\n+$/g, "");
-        return "\n```\n" + raw + "\n```\n\n";
+        // 语言取自 data-lang（mdToHtml 写的）或 class="language-x"（外面粘进来的）
+        var plang = (node.getAttribute("data-lang") || "").trim();
+        if (!plang) {
+          var pcls = (node.getAttribute("class") || "") + " " +
+                     (codeEl ? (codeEl.getAttribute("class") || "") : "");
+          var plm = pcls.match(/language-([\w+#.-]+)/i);
+          if (plm) plang = plm[1];
+        }
+        plang = plang.replace(/[^\w+#.-]/g, "").toLowerCase();
+        return "\n```" + plang + "\n" + raw + "\n```\n\n";
       }
       case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
         // 正文从 h2 起算：h2 → "#"，h3 → "##"，以此类推（与 mdToHtml 的 +1 偏移对齐，保证往返稳定）
@@ -961,7 +978,8 @@
     TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1,
     SPAN: 1, DIV: 1, FIGURE: 1, FIGCAPTION: 1, SUP: 1, SUB: 1, MARK: 1
   };
-  var KEEP_ATTR = { href: 1, src: 1, alt: 1, "class": 1, download: 1, colspan: 1, rowspan: 1 };
+  // data-lang 要留着：它是代码块的语言标记，线上靠它上色 + 显示角标
+  var KEEP_ATTR = { href: 1, src: 1, alt: 1, "class": 1, download: 1, colspan: 1, rowspan: 1, "data-lang": 1 };
 
   function sanitize(root, opts) {
     var keepFn = (opts && opts.fmt) ? keepFmtStyle : keepStyle;
@@ -1146,17 +1164,100 @@
       .replace(/^\n+|\n+$/g, "");
   }
 
+  /* ============================================ 代码高亮
+     写作台里代码块有两态：
+       · 光标在块里（.editing）：纯文本，随便改，绝不往 DOM 里塞 span；
+       · 光标离开：就地染色，只是显示层。
+     这样编辑时不会出现「颜色跟着光标乱跳」「输入把 span 拆断」，
+     平时看到的又都是彩色代码。染色产生的 span 发布前会被 stripHl() 剥掉。 */
+
+  function preOf(node) {
+    while (node && node !== el.rich) {
+      if (node.nodeType === 1 && node.nodeName === "PRE") return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  var activePre = null;
+
+  function paintPre(pre) {
+    if (!pre || !window.HL) return;
+    if (pre.classList.contains("editing")) return;
+    var code = pre.querySelector("code") || pre;
+    var raw = code.textContent;
+    if (!raw) return;
+    HL.paint(code, raw, HL.langOf(pre, code));
+    pre.classList.add("hl-on");
+  }
+
+  function unpaintPre(pre) {
+    if (!pre || !pre.classList.contains("hl-on")) return;
+    var code = pre.querySelector("code") || pre;
+    var raw = code.textContent;
+    code.textContent = raw;          // 丢掉 span，只留文字
+    pre.classList.remove("hl-on");
+  }
+
+  function paintAll(root) {
+    var box = root || el.rich;
+    if (!box || !box.querySelectorAll) return;
+    Array.prototype.forEach.call(box.querySelectorAll("pre"), paintPre);
+  }
+
+  function unpaintAll(root) {
+    var box = root || el.rich;
+    if (!box || !box.querySelectorAll) return;
+    Array.prototype.forEach.call(box.querySelectorAll("pre"), unpaintPre);
+  }
+
+  function setActivePre(pre) {
+    if (pre === activePre) return;
+    var old = activePre;
+    activePre = pre;
+    if (old) { old.classList.remove("editing"); paintPre(old); }
+    if (pre) { pre.classList.add("editing"); unpaintPre(pre); }
+  }
+
+  /* 光标一动就知道在不在代码块里：进出只切换那一个块，不重排整篇 */
+  document.addEventListener("selectionchange", function () {
+    var sel = window.getSelection();
+    var node = sel && sel.anchorNode;
+    if (!node || !el.rich.contains(node)) { setActivePre(null); return; }
+    setActivePre(preOf(node));
+  });
+
+  el.rich.addEventListener("blur", function () { setActivePre(null); });
+
+  /* 发布 / 存草稿用的 HTML：把显示层的染色 span 剥干净 */
+  function stripHl(html) {
+    if (!html || html.indexOf("t-") < 0) return html;
+    var box = document.createElement("div");
+    box.innerHTML = html;
+    Array.prototype.forEach.call(box.querySelectorAll("pre"), function (pre) {
+      if (!pre.classList.contains("hl-on") && !pre.querySelector('[class^="t-"]')) return;
+      var code = pre.querySelector("code") || pre;
+      code.textContent = code.textContent;
+      pre.classList.remove("hl-on", "editing");
+    });
+    return box.innerHTML;
+  }
+
   /* ============================================ 模式切换 */
 
   function setMode(next) {
     if (next === mode) return;
 
     if (next === "md") {
+      setActivePre(null);
+      unpaintAll();                       // 转 md 前先把染色层剥掉，别写进草稿
       el.md.value = htmlToMd(el.rich.innerHTML);
       renderMdPreview();
     } else {
+      setActivePre(null);
       el.rich.innerHTML = mdToHtml(el.md.value) || "";
       ensureChips();
+      paintAll();
     }
 
     mode = next;
@@ -1171,6 +1272,7 @@
 
   function renderMdPreview() {
     el.mdPreview.innerHTML = mdToHtml(el.md.value);
+    if (window.HL) HL.run(el.mdPreview);
   }
 
   /* ============================================ 工具栏 */
@@ -1953,6 +2055,7 @@
     var code = document.createElement("code");
     code.textContent = txt;
     pre.innerHTML = "";
+    pre.classList.remove("hl-on", "editing");   // 染色层随 innerHTML 一起没了，类也清掉
     pre.appendChild(code);
     var p = ensureTailPara(pre);
     placeCaret(p, false);
@@ -2191,6 +2294,7 @@
           el.md.value = htmlToMd(el.rich.innerHTML);
         }
         ensureChips();
+        paintAll();
         renderMdPreview();
 
         if (p.category) { window.__pendingCat = p.category; loadCategories(); }
@@ -2204,6 +2308,7 @@
   function currentBodyHtml() {
     if (mode === "rich") {
       var clone = el.rich.cloneNode(true);
+      unpaintAll(clone);                // 染色是显示层，不进线上正文
       reviveEscapedFmt(clone);          // 旧草稿里的转义标签先还原，再导出
       sanitize(clone, { fmt: true });
       // 代码块回车用的零宽锚点只在编辑器里有用，别带进线上文章
@@ -2213,7 +2318,8 @@
   }
 
   function currentSource() {
-    return mode === "rich" ? el.rich.innerHTML : el.md.value;
+    if (mode !== "rich") return el.md.value;
+    return el.rich.querySelector("pre.hl-on") ? stripHl(el.rich.innerHTML) : el.rich.innerHTML;
   }
 
   function saveDraft() {
@@ -2223,7 +2329,7 @@
         title: el.title.value, date: el.date.value,
         category: el.category.value, slug: el.slug.value,
         excerpt: el.excerpt.value,
-        rich: el.rich.innerHTML, md: el.md.value, slugTouched: slugTouched
+        rich: currentSource(), md: el.md.value, slugTouched: slugTouched
       }));
     } catch (e) {}
   }
@@ -2244,6 +2350,7 @@
       el.md.value = healEscapedMd(d.md || "");
       reviveEscapedFmt(el.rich);
       ensureChips();
+      paintAll();
       currentSlug = d.currentSlug || "";
       slugTouched = !!d.slugTouched;
       if (d.category) window.__pendingCat = d.category;
@@ -2946,7 +3053,7 @@
       loadCategories();
       setTimeout(function () { el.category.value = s.catRaw; }, 300);
     }
-    ensureChips(); renderMdPreview(); saveDraft();
+    ensureChips(); paintAll(); renderMdPreview(); saveDraft();
     return true;
   }
 
@@ -2961,6 +3068,7 @@
     sanitize(box, { fmt: true });
     while (box.firstChild) el.rich.appendChild(box.firstChild);
     ensureChips();
+    paintAll();
   }
 
   function replaceBody(html) {
@@ -2975,6 +3083,7 @@
     el.rich.innerHTML = "";
     while (box.firstChild) el.rich.appendChild(box.firstChild);
     ensureChips();
+    paintAll();
   }
 
   function applyAgent(actions) {

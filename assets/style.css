@@ -538,6 +538,7 @@ body {
   overflow-x: auto;
   font-size: 0.875rem;
   line-height: 1.7;
+  position: relative;
 }
 
 .prose pre code {
@@ -547,6 +548,96 @@ body {
   font-size: inherit;
   color: var(--text-dim);
 }
+
+/* 右上角的语言角标：来自 <pre data-lang="cpp">，由 hl.js 自动补上。
+   纯装饰，不参与选中/复制（user-select:none）。 */
+.prose pre[data-lang]::before,
+#richEditor pre[data-lang]::before,
+#mdPreview pre[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 0.4rem;
+  right: 0.7rem;
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--muted);
+  opacity: 0.5;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
+.prose pre[data-lang],
+#richEditor pre[data-lang],
+#mdPreview pre[data-lang] { padding-top: 1.75rem; }
+
+/* ---------------- 语法高亮配色 ----------------
+   由 assets/hl.js 给 token 打上 .t-xxx 类。深色/浅色两套，
+   原则是「低饱和、分得清」，不抢正文。 */
+:root {
+  --hl-com: #6f7b8a;
+  --hl-str: #9fcf7e;
+  --hl-num: #e6a273;
+  --hl-kw: #c294e8;
+  --hl-typ: #6fc3d8;
+  --hl-fn: #ffd479;
+  --hl-pre: #ff9a76;
+  --hl-op: #93a1b1;
+  --hl-pun: #7c8794;
+  --hl-dec: #ffb86b;
+  --hl-var: #eeb189;
+  --hl-key: #8fb8ff;
+  --hl-tag: #ff8f7a;
+  --hl-attr: #ffd479;
+  --hl-sel: #9fcf7e;
+  --hl-meta: #6f7b8a;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --hl-com: #79808a;
+    --hl-str: #1f6b33;
+    --hl-num: #8f4408;
+    --hl-kw: #6e2199;
+    --hl-typ: #0a5b74;
+    --hl-fn: #7a4a00;
+    --hl-pre: #97284a;
+    --hl-op: #47505a;
+    --hl-pun: #666d76;
+    --hl-dec: #9c4400;
+    --hl-var: #8f4408;
+    --hl-key: #1f4a8f;
+    --hl-tag: #97284a;
+    --hl-attr: #7a4a00;
+    --hl-sel: #1f6b33;
+    --hl-meta: #79808a;
+  }
+}
+
+pre .t-com { color: var(--hl-com); font-style: italic; }
+pre .t-str { color: var(--hl-str); }
+pre .t-num { color: var(--hl-num); }
+pre .t-kw  { color: var(--hl-kw); }
+pre .t-typ { color: var(--hl-typ); }
+pre .t-fn  { color: var(--hl-fn); }
+pre .t-pre { color: var(--hl-pre); }
+pre .t-op  { color: var(--hl-op); }
+pre .t-pun { color: var(--hl-pun); }
+pre .t-dec { color: var(--hl-dec); }
+pre .t-var { color: var(--hl-var); }
+pre .t-key { color: var(--hl-key); }
+pre .t-tag { color: var(--hl-tag); }
+pre .t-attr { color: var(--hl-attr); }
+pre .t-sel { color: var(--hl-sel); }
+pre .t-meta { color: var(--hl-meta); }
+pre .t-bi  { color: var(--hl-typ); }
+pre .t-h   { color: var(--hl-fn); font-weight: 700; }
+pre .t-quote { color: var(--hl-str); }
+pre .t-li  { color: var(--hl-kw); }
+pre .t-bold { color: var(--hl-fn); font-weight: 700; }
+pre .t-fence, pre .t-hr { color: var(--hl-com); }
 
 .prose hr {
   border: none;

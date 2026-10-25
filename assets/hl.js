@@ -1,0 +1,377 @@
+/* ---------------------------------------------------------
+   xiray — 极简语法高亮（零依赖，~9KB）
+   线上文章页 / 写作台 / AI 面板共用。
+
+   用法：
+     HL.tokens(text, lang) -> [{t:"kw", s:"int"}, {t:"", s:" "}, ...]
+     HL.paint(el, text, lang)   把 token 结构填进 el（不经过 innerHTML，安全）
+     HL.run(root)               扫描 root 下所有 pre > code 并上色
+     HL.langOf(pre, code)       从 data-lang / class="language-x" / 内容推断语言
+
+   设计原则：
+   - 只做「看得清」的高亮，不做完整解析器；宁可漏色，不可错乱。
+   - 所有规则只用非捕获组 (?:...)，这样一次交替正则就能定位 token。
+   - 没写语言时按保守启发式猜，猜不出就原样显示（不上色）。
+   --------------------------------------------------------- */
+(function (global) {
+  "use strict";
+
+  /* ---------------- 语言别名 ---------------- */
+  var ALIAS = {
+    c: "cpp", h: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp",
+    "c++": "cpp", cplusplus: "cpp", cpp: "cpp",
+    js: "js", mjs: "js", cjs: "js", jsx: "js", javascript: "js", node: "js",
+    ts: "ts", tsx: "ts", typescript: "ts",
+    py: "py", py3: "py", python: "py", python3: "py",
+    java: "java", kotlin: "java", kt: "java", scala: "java",
+    go: "go", golang: "go",
+    rs: "rust", rust: "rust",
+    html: "html", htm: "html", xml: "html", svg: "html", xhtml: "html", vue: "html",
+    css: "css", scss: "css", sass: "css", less: "css", stylus: "css",
+    json: "json", json5: "json", jsonc: "json",
+    sh: "sh", bash: "sh", shell: "sh", zsh: "sh", console: "sh",
+    cmd: "sh", bat: "sh", ps: "sh", ps1: "sh", powershell: "sh",
+    sql: "sql", mysql: "sql", pgsql: "sql", postgres: "sql", sqlite: "sql",
+    md: "md", markdown: "md",
+    text: "text", txt: "text", plain: "text", plaintext: "text", "": "text"
+  };
+
+  /* ---------------- 可复用片段 ---------------- */
+  var COM_C = "//[^\\n]*|/\\*[\\s\\S]*?\\*/";                    // // 与 /* */
+  var COM_H = "#[^\\n]*";                                        // # 注释
+  var STR_DQ = '"(?:[^"\\\\\\n]|\\\\.)*"?';                       // "..."（可跨转义）
+  var STR_SQ = "'(?:[^'\\\\\\n]|\\\\.)*'?";                       // '...'
+  var NUM = "\\b(?:0[xX][0-9a-fA-F_]+|0[bB][01_]+|\\d[\\d_]*(?:\\.\\d[\\d_]*)?(?:[eE][+-]?\\d+)?)[uUlLfFdDn]*\\b";
+  var OP = "->\\*?|::|<<=?|>>=?|[-+*/%=<>!&|^~?:]+";
+  var PUN = "[{}\\[\\]();,.]";
+
+  function kw(list) { return "\\b(?:" + list + ")\\b"; }
+
+  /* ---------------- 语言规则 ----------------
+     每项 [class, 正则片段]，按优先级从高到低。
+     class 对应 CSS 里的 .t-<class>。 */
+  var SPEC = {
+    cpp: {
+      f: "gm",
+      r: [
+        ["pre", "^[ \\t]*#[ \\t]*(?:include|define|pragma|if|ifdef|ifndef|elif|else|endif|undef|error|warning|line)\\b.*$"],
+        ["com", COM_C],
+        ["str", STR_DQ + "|" + STR_SQ],
+        ["num", NUM],
+        ["kw", kw("alignas|alignof|and|asm|auto|break|case|catch|class|const|constexpr|consteval|constinit|const_cast|continue|decltype|default|delete|do|dynamic_cast|else|enum|explicit|export|extern|false|for|friend|goto|if|inline|mutable|namespace|new|noexcept|nullptr|operator|or|private|protected|public|register|reinterpret_cast|return|sizeof|static|static_assert|static_cast|struct|switch|template|this|throw|true|try|typedef|typeid|typename|union|using|virtual|volatile|while|override|final|co_await|co_return|co_yield|requires|concept")],
+        ["typ", kw("bool|char|char8_t|char16_t|char32_t|double|float|int|long|short|signed|unsigned|void|wchar_t|size_t|ssize_t|ptrdiff_t|int8_t|int16_t|int32_t|int64_t|uint8_t|uint16_t|uint32_t|uint64_t|string|wstring|u16string|vector|array|deque|forward_list|list|map|multimap|unordered_map|unordered_multimap|set|multiset|unordered_set|unordered_multiset|pair|tuple|queue|priority_queue|stack|bitset|valarray|shared_ptr|unique_ptr|weak_ptr|function|bind|make_pair|make_shared|make_unique|thread|mutex|lock_guard|unique_lock|istream|ostream|iostream|stringstream|ifstream|ofstream|fstream|std|FILE|INT_MAX|INT_MIN")],
+        ["fn", "\\b[A-Za-z_]\\w*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    java: {
+      f: "gm",
+      r: [
+        ["com", COM_C],
+        ["str", '"""[\\s\\S]*?"""|' + STR_DQ + "|" + STR_SQ],
+        ["dec", "@[A-Za-z_]\\w*"],
+        ["num", NUM],
+        ["kw", kw("abstract|assert|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|var|void|volatile|while|record|sealed|permits|yield|true|false|null")],
+        ["typ", kw("String|Integer|Long|Double|Float|Boolean|Character|Byte|Short|Object|List|Map|Set|ArrayList|LinkedList|HashMap|HashSet|TreeMap|Queue|Deque|Stack|Optional|Stream|Collectors|Arrays|Collections|System|Math|Thread|Runnable|Exception|RuntimeException|IllegalArgumentException|StringBuilder|LocalDate|LocalDateTime|BigDecimal")],
+        ["fn", "\\b[A-Za-z_]\\w*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    ts: {
+      f: "gm",
+      r: [
+        ["com", COM_C],
+        ["str", STR_DQ + "|" + STR_SQ + "|`(?:[^`\\\\]|\\\\.)*`?"],
+        ["num", NUM],
+        ["kw", kw("abstract|any|as|asserts|async|await|break|case|catch|class|const|constructor|continue|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|infer|instanceof|interface|is|keyof|let|namespace|new|null|of|override|private|protected|public|readonly|return|satisfies|set|static|super|switch|symbol|this|throw|true|try|type|typeof|undefined|unique|var|void|while|yield|never|unknown|string|number|boolean|bigint|object")],
+        ["typ", kw("Array|Object|String|Number|Boolean|Function|Promise|Response|Request|Map|Set|WeakMap|WeakSet|Symbol|RegExp|JSON|Math|Date|Error|BigInt|HTMLElement|Element|Node|Event|Record|Partial|Readonly|Pick|Omit")],
+        ["fn", "\\b[A-Za-z_$][\\w$]*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    js: {
+      f: "gm",
+      r: [
+        ["com", COM_C],
+        ["str", STR_DQ + "|" + STR_SQ + "|`(?:[^`\\\\]|\\\\.)*`?"],
+        ["num", NUM],
+        ["kw", kw("async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|export|extends|false|finally|for|from|function|get|if|import|in|instanceof|let|new|null|of|return|set|static|super|switch|this|throw|true|try|typeof|undefined|var|void|while|with|yield")],
+        ["typ", kw("Array|Object|String|Number|Boolean|Function|Promise|Map|Set|WeakMap|WeakSet|Symbol|RegExp|JSON|Math|Date|Error|BigInt|Proxy|Reflect|Intl|document|window|console")],
+        ["fn", "\\b[A-Za-z_$][\\w$]*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    py: {
+      f: "gm",
+      r: [
+        ["com", COM_H],
+        ["str", "(?:[rRbBuUfF]{0,2})(?:\\\"\\\"\\\"[\\s\\S]*?\\\"\\\"\\\"|'''[\\s\\S]*?'''|" + STR_DQ + "|" + STR_SQ + ")"],
+        ["dec", "^[ \\t]*@[\\w.]+"],
+        ["num", NUM],
+        ["kw", kw("and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|raise|return|try|while|with|yield|case")],
+        ["typ", kw("int|float|str|bool|list|dict|set|tuple|bytes|bytearray|object|type|range|len|enumerate|zip|map|filter|sum|min|max|print|open|sorted|reversed|isinstance|getattr|setattr|hasattr|super|self|cls|None|True|False|Exception|ValueError|TypeError|KeyError|IndexError|RuntimeError|StopIteration")],
+        ["fn", "\\b[A-Za-z_]\\w*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    go: {
+      f: "gm",
+      r: [
+        ["com", COM_C],
+        ["str", '`[^`]*`|' + STR_DQ + "|" + STR_SQ],
+        ["num", NUM],
+        ["kw", kw("break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var")],
+        ["typ", kw("bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr|true|false|nil|iota|make|new|len|cap|append|copy|delete|panic|recover|print|println")],
+        ["fn", "\\b[A-Za-z_]\\w*(?=\\s*\\()"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    rust: {
+      f: "gm",
+      r: [
+        ["com", COM_C],
+        ["str", 'r?#*"(?:[^"\\\\]|\\\\.)*"#*|' + STR_DQ + "|'(?:[^'\\\\\\n]|\\\\.)'"],
+        ["dec", "#!?\\[[^\\]\\n]*\\]"],
+        ["num", NUM],
+        ["kw", kw("as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while|macro_rules")],
+        ["typ", kw("i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64|bool|char|str|String|Vec|VecDeque|Option|Result|Box|Rc|Arc|RefCell|HashMap|HashSet|BTreeMap|Some|None|Ok|Err|println|print|format|vec")],
+        ["fn", "\\b[A-Za-z_]\\w*(?=\\s*[(!])"],
+        ["op", OP],
+        ["pun", PUN]
+      ]
+    },
+
+    html: {
+      f: "gm",
+      r: [
+        ["com", "<!--[\\s\\S]*?-->"],
+        ["meta", "<!doctype[^>]*>|<\\?[\\s\\S]*?\\?>|<![A-Z][^>]*>"],
+        ["tag", "</?[A-Za-z][\\w:-]*"],
+        ["str", STR_DQ + "|" + STR_SQ],
+        ["attr", "\\b[A-Za-z_:][-\\w:.]*(?=\\s*=)"],
+        ["pun", "[<>/=]+"]
+      ]
+    },
+
+    css: {
+      f: "gm",
+      r: [
+        ["com", "/\\*[\\s\\S]*?\\*/"],
+        ["str", STR_DQ + "|" + STR_SQ],
+        ["at", "@[\\w-]+"],
+        ["key", "[-a-zA-Z]+(?=\\s*:)"],
+        ["num", "#[0-9a-fA-F]{3,8}\\b|\\b\\d+(?:\\.\\d+)?(?:px|em|rem|ex|ch|vw|vh|vmin|vmax|%|s|ms|deg|turn|fr|pt)?\\b"],
+        ["sel", "[.#][-\\w]+|::?[a-zA-Z-]+(?=[\\s,{:.\\[])"],
+        ["pun", "[{}:;,()>+~*]+"]
+      ]
+    },
+
+    json: {
+      f: "gm",
+      r: [
+        ["key", '"(?:[^"\\\\]|\\\\.)*"(?=\\s*:)'],
+        ["str", STR_DQ],
+        ["num", "-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"],
+        ["kw", "\\b(?:true|false|null)\\b"],
+        ["pun", "[{}\\[\\],:]+"]
+      ]
+    },
+
+    sh: {
+      f: "gm",
+      r: [
+        ["com", "(?:^|[ \\t])#[^\\n]*"],
+        ["str", STR_DQ + "|" + STR_SQ],
+        ["var", "\\$\\{[^}\\n]*\\}|\\$[A-Za-z_][\\w]*|\\$[0-9@#?$!*-]"],
+        ["kw", kw("if|then|elif|else|fi|for|while|until|do|done|case|esac|function|return|in|local|export|readonly|declare|set|unset|shift|break|continue|exit|source|trap|select|time")],
+        ["bi", kw("echo|printf|cd|pwd|ls|cp|mv|rm|mkdir|rmdir|cat|less|more|head|tail|grep|egrep|sed|awk|find|xargs|sort|uniq|wc|tee|touch|chmod|chown|ln|tar|zip|unzip|curl|wget|git|npm|pnpm|yarn|node|python|python3|pip|pip3|make|cmake|gcc|clang|go|cargo|rustc|java|javac|docker|sudo|apt|apt-get|brew|systemctl|ssh|scp|rsync|ps|kill|killall|top|df|du|env|which|man|true|false|read|test")],
+        ["num", NUM],
+        ["op", OP],
+        ["pun", "[{}()\\[\\];|&]+"]
+      ]
+    },
+
+    sql: {
+      f: "gim",
+      r: [
+        ["com", "--[^\\n]*|/\\*[\\s\\S]*?\\*/"],
+        ["str", "'(?:[^'\\\\]|\\\\.|'')*'?"],
+        ["kw", kw("select|from|where|insert|into|values|value|update|set|delete|create|table|alter|drop|truncate|index|view|join|left|right|inner|outer|full|cross|natural|on|group|by|order|having|limit|offset|union|all|as|and|or|not|null|is|in|between|like|regexp|distinct|case|when|then|else|end|primary|key|foreign|references|default|auto_increment|unique|exists|begin|start|transaction|commit|rollback|count|sum|avg|min|max|cast|coalesce|ifnull|desc|asc|with|returning|grant|revoke")],
+        ["num", "\\b\\d+(?:\\.\\d+)?\\b"],
+        ["var", "`[^`\\n]*`|@[A-Za-z_]\\w*"],
+        ["pun", "[(),;.*]+"]
+      ]
+    },
+
+    md: {
+      f: "gm",
+      r: [
+        ["fence", "^[ \\t]*```.*$"],
+        ["h", "^#{1,6}[ \\t].*$"],
+        ["quote", "^[ \\t]*>.*$"],
+        ["li", "^[ \\t]*(?:[-*+]|\\d+\\.)[ \\t]"],
+        ["hr", "^[ \\t]*(?:---+|\\*\\*\\*+|___+)[ \\t]*$"],
+        ["bold", "\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__"],
+        ["str", "`[^`\\n]+`|\\[[^\\]\\n]*\\]\\([^)\\n]*\\)"],
+        ["fn", "!?\\[[^\\]\\n]*\\]|^[ \\t]*\\[[^\\]\\n]+\\]:"]
+      ]
+    },
+
+    text: { f: "gm", r: [] }
+  };
+
+  /* ---------------- 编译 ---------------- */
+  var COMPILED = {};
+  function compiled(name) {
+    if (COMPILED[name]) return COMPILED[name];
+    var spec = SPEC[name] || SPEC.text;
+    if (!spec.r.length) return (COMPILED[name] = null);
+    var names = [], srcs = [];
+    for (var i = 0; i < spec.r.length; i++) {
+      names.push(spec.r[i][0]);
+      srcs.push("(" + spec.r[i][1] + ")");
+    }
+    return (COMPILED[name] = { names: names, rx: new RegExp(srcs.join("|"), spec.f || "gm") });
+  }
+
+  function normLang(lang) {
+    var k = String(lang || "").toLowerCase().trim();
+    return ALIAS.hasOwnProperty(k) ? ALIAS[k] : (SPEC[k] ? k : "text");
+  }
+
+  /* ---------------- 分词 ---------------- */
+  function tokens(text, lang) {
+    var s = String(text == null ? "" : text);
+    var L = normLang(lang);
+    var c = compiled(L);
+    if (!c || !s) return [{ t: "", s: s }];
+
+    var out = [], i = 0;
+    c.rx.lastIndex = 0;
+    var guard = 0;
+    while (i < s.length && guard++ < 200000) {
+      c.rx.lastIndex = i;
+      var m = c.rx.exec(s);
+      if (!m) break;
+      if (m.index > i) out.push({ t: "", s: s.slice(i, m.index) });
+      var cls = "";
+      for (var g = 1; g < m.length; g++) {
+        if (m[g] !== undefined) { cls = c.names[g - 1]; break; }
+      }
+      out.push({ t: cls, s: m[0] });
+      i = c.rx.lastIndex;
+      if (c.rx.lastIndex <= m.index) i = m.index + 1; // 防零宽死循环
+    }
+    if (i < s.length) out.push({ t: "", s: s.slice(i) });
+    return out;
+  }
+
+  /* ---------------- 无语言时保守推断 ---------------- */
+  function guess(s) {
+    var t = String(s || "");
+    if (!t.trim()) return "text";
+    if (/^[ \t]*#[ \t]*(?:include|define|pragma)\b/m.test(t) || /std::|#include\s*</.test(t)) return "cpp";
+    if (/System\.out\.print|public\s+static\s+void\s+main|^\s*(?:public|private|protected)\s+(?:static\s+)?(?:final\s+)?class\s/m.test(t)) return "java";
+    if (/^[ \t]*(?:def|class)\s+\w+|^[ \t]*(?:from\s+[\w.]+\s+)?import\s+[\w.]+/m.test(t) && !/\{[\s\S]*;\s*$/m.test(t)) return "py";
+    if (/^\s*package\s+\w+\s*$/m.test(t) && /\bfunc\s+\w+\s*\(/.test(t)) return "go";
+    if (/\bfn\s+\w+\s*[(<]|\blet\s+mut\b|\bimpl\s+\w+/.test(t)) return "rust";
+    if (/<!--|<\/[a-zA-Z][\w:-]*>/.test(t)) return "html";
+    if (/^\s*[[{][\s\S]*"[^"]*"\s*:/.test(t) && !/[;()]/.test(t)) return "json";
+    if (/\b(?:SELECT|FROM|WHERE|INSERT\s+INTO|UPDATE\s+\w+\s+SET)\b/i.test(t) &&
+        /\b(?:SELECT|FROM|WHERE)\b/.test(t.toUpperCase())) return "sql";
+    if (/^\s*(?:\$ |# )?(?:npm|pnpm|yarn|git|sudo|cd|ls|mkdir|curl|wget|python3?|pip3?|node|go|cargo|make)\s/m.test(t) ||
+        /^#!\/(?:usr\/)?bin\/(?:ba|z)?sh/.test(t) ||
+        /(?:^|\s)(?:&&|\|\||2>&1|>\/dev\/null)/.test(t)) return "sh";
+    if (/\b(?:const|let|var)\s+[\w${]+\s*=|\bfunction\s*\w*\s*\(|=>\s*[{(]|console\.log\b/.test(t)) return "js";
+    if (/^\s*(?:[.#][\w-]+|[a-z][\w-]*)\s*[,>]?[\s\S]*\{[^}]*[-a-z]+\s*:\s*[^;]+;/.test(t) &&
+        !/\bfunction\b|=>/.test(t)) return "css";
+    return "text";
+  }
+
+  /* ---------------- DOM 渲染 ---------------- */
+  function paint(el, text, lang) {
+    var toks = tokens(text, lang);
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < toks.length; i++) {
+      var tk = toks[i];
+      if (!tk.t) {
+        frag.appendChild(document.createTextNode(tk.s));
+      } else {
+        var sp = document.createElement("span");
+        sp.className = "t-" + tk.t;
+        sp.textContent = tk.s;
+        frag.appendChild(sp);
+      }
+    }
+    while (el.firstChild) el.removeChild(el.firstChild);
+    el.appendChild(frag);
+  }
+
+  function langOf(pre, code) {
+    var raw = "";
+    if (pre && pre.getAttribute) raw = pre.getAttribute("data-lang") || "";
+    if (!raw && code && code.getAttribute) raw = code.getAttribute("data-lang") || "";
+    if (!raw && code && code.getAttribute) {
+      var cls = code.getAttribute("class") || "";
+      var m = cls.match(/language-([\w+#.-]+)/i) || cls.match(/\blang-([\w+#.-]+)/i);
+      if (m) raw = m[1];
+    }
+    if (!raw && pre && pre.getAttribute) {
+      var cls2 = pre.getAttribute("class") || "";
+      var m2 = cls2.match(/language-([\w+#.-]+)/i);
+      if (m2) raw = m2[1];
+    }
+    raw = String(raw || "").trim();
+    if (raw) return normLang(raw);
+    var text = code ? code.textContent : (pre ? pre.textContent : "");
+    return normLang(guess(text));
+  }
+
+  function run(root) {
+    var box = root || document;
+    var list = box.querySelectorAll ? box.querySelectorAll("pre > code") : [];
+    for (var i = 0; i < list.length; i++) {
+      var code = list[i];
+      var pre = code.parentNode;
+      if (!pre || pre.getAttribute("data-hl") === "1") continue;
+      pre.setAttribute("data-hl", "1");
+      var lang = langOf(pre, code);
+      if (lang === "text") continue;
+      paint(code, code.textContent, lang);
+    }
+  }
+
+  var HL = {
+    tokens: tokens,
+    paint: paint,
+    run: run,
+    langOf: langOf,
+    guess: guess,
+    normLang: normLang,
+    alias: ALIAS,
+    langs: Object.keys(SPEC)
+  };
+
+  global.HL = HL;
+
+  /* 线上文章页：DOM 就绪后自动上色（写作台会关掉这个，自己控制时机） */
+  if (!global.__HL_MANUAL__) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () { run(document); });
+    } else {
+      run(document);
+    }
+  }
+})(typeof window !== "undefined" ? window : this);

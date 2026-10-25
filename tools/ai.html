@@ -6,6 +6,7 @@
 <title>AI 问答 — xiray</title>
 <meta name="color-scheme" content="dark light">
 <link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/hl.js"></script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 <style>
   html, body { height: 100%; overflow: hidden; }
@@ -740,7 +741,10 @@
     var body = document.createElement("div");
     body.className = "body";
     if (m.role === "user") body.textContent = m.content || "";
-    else body.innerHTML = mdToHtml(m.content || "");
+    else {
+      body.innerHTML = mdToHtml(m.content || "");
+      if (window.HL) HL.run(body);
+    }
 
     if (m.error) {
       body.innerHTML = "";
@@ -833,6 +837,7 @@
       "每层递归处理 n 个字符，共 n 层，所以是 O(n²)。\n" +
       "[[/WRITER-AGENT]]\n" +
       "- 这个区块**不要**用代码块包起来，**不要**用 JSON；正文里的 ``` 代码块照常写，不会和它冲突；\n" +
+      "- 正文里的代码块请在第一行写语言（```cpp / ```python / ```js 这样），写作台会自动上色；\n" +
       "- 正文里引号、反斜杠、箭头、缩进都原样写，不需要任何转义；\n" +
       "- op 只能是 append_md（末尾追加）/ replace_md（整篇重写）/ set_meta（改标题等）/ " +
       "open_post（换一篇来改）/ new_post（新建空白草稿）；\n" +
@@ -1217,7 +1222,9 @@
       var tag = n.nodeName.toLowerCase();
       if (tag === "br") { out.push("\n"); return; }
       if (tag === "pre") {
-        out.push("\n```\n" + (n.textContent || "").replace(/\u200b/g, "").replace(/\n+$/, "") + "\n```\n");
+        var pcode = n.querySelector("code");
+        var plang = (n.getAttribute("data-lang") || (pcode && pcode.getAttribute("data-lang")) || "").trim();
+        out.push("\n```" + plang + "\n" + (n.textContent || "").replace(/\u200b/g, "").replace(/\n+$/, "") + "\n```\n");
         return;
       }
       if (tag === "img") { out.push("![图片](" + (n.getAttribute("src") || "") + ")"); return; }
@@ -1462,6 +1469,7 @@
 
     function paint() {
       bodyEl.innerHTML = mdToHtml(aiMsg.content);
+      if (window.HL) HL.run(bodyEl);      // 流式重渲染后要重新上色
       bodyEl.classList.add("typing");
       if (thinkEl) {
         thinkEl.querySelector(".inner").textContent = aiMsg.reasoning;

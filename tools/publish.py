@@ -569,6 +569,7 @@ ARTICLE = u"""<!doctype html>
   </div>
 </footer>
 
+<script src="../assets/hl.js"></script>
 </body>
 </html>
 """
