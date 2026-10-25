@@ -552,30 +552,90 @@ body {
   color: var(--text-dim);
 }
 
-/* 右上角的语言角标：来自 <pre data-lang="cpp">，由 hl.js 自动补上。
-   纯装饰，不参与选中/复制（user-select:none）。 */
+/* 代码块外壳：为了放不随横向滚动跑掉的「复制」按钮，
+   hl.js 会给每个 pre 套一层 .code-block。 */
+.code-block {
+  position: relative;
+}
+.code-block > pre {
+  margin-top: 0;
+}
 
-.prose pre[data-lang]::after,
-#richEditor pre[data-lang]::after,
-#mdPreview pre[data-lang]::after {
-  content: attr(data-lang);
+/* 复制按钮（hl.js 注入，纯前端，不进正文/不参与导出） */
+.code-copy {
   position: absolute;
-  top: 0.4rem;
-  right: 0.7rem;
+  top: 0.42rem;
+  right: 0.6rem;
+  z-index: 2;
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--code-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 0.28rem 0.5rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.code-block:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+}
+.code-copy:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+.code-copy.done {
+  opacity: 1;
+  color: #2ea043;
+  border-color: currentColor;
+}
+@media (hover: none) {
+  .code-copy { opacity: 0.8; }
+}
+@media print {
+  .code-copy { display: none; }
+}
+
+/* 左上角的语言角标：来自 <pre data-lang="cpp"> + data-lang-label="C++"
+   （作者写的、AI 认的、正则推的都会显示，label 由 hl.js 补） */
+.prose pre[data-lang-label]::after,
+#richEditor pre[data-lang-label]::after,
+#mdPreview pre[data-lang-label]::after,
+.code-wrap pre[data-lang-label]::after {
+  content: attr(data-lang-label);
+  position: absolute;
+  top: 0.42rem;
+  left: calc(var(--code-pad-x, 1.25rem));
   font-family: var(--sans);
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.08em;
   line-height: 1;
   color: var(--muted);
-  opacity: 0.5;
-  text-transform: uppercase;
+  opacity: 0.55;
   pointer-events: none;
   user-select: none;
 }
-.prose pre[data-lang],
-#richEditor pre[data-lang],
-#mdPreview pre[data-lang] { padding-top: 1.75rem; }
+/* AI 认出来的多一个小圆点，跟作者手写的区分开 */
+.prose pre[data-lang-src="ai"]::after,
+#mdPreview pre[data-lang-src="ai"]::after,
+#richEditor pre[data-lang-src="ai"]::after,
+.code-wrap pre[data-lang-src="ai"]::after {
+  content: attr(data-lang-label) " · AI";
+  opacity: 0.7;
+}
+.prose pre[data-lang-label],
+#richEditor pre[data-lang-label],
+#mdPreview pre[data-lang-label],
+.code-wrap pre[data-lang-label] { padding-top: 1.75rem; }
+
+/* 有复制按钮的块一律留出顶部那一条，不然按钮会压住第一行
+   （纯文本块没有语言角标，也得留，否则「复制」直接盖在第一个字上） */
+.code-block > pre { padding-top: 1.75rem; }
 
 /* ---------------- 语法高亮配色 ----------------
    由 assets/hl.js 给 token 打上 .t-xxx 类。

@@ -7,7 +7,7 @@
 <meta name="description" content="不能改 val，只能改节点的 next。先用 dummy head 消除头节点特判，再分三步修改指针完成相邻节点交换，并用循环条件保证不越界。">
 <meta name="category" content="代码编写">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261025c">
+<link rel="stylesheet" href="../assets/style.css?v=20261025d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -44,7 +44,7 @@
 <p>设子链表为<code>a → b → c → d</code>，交换b, c,需要改变三处：</p>
 <ul><li>a -&gt; next 从指向b改为指向c</li><li>b -&gt; next 从指向c改为指向d</li><li>c -&gt; next 从指向d改为指向b  </li></ul>
 <p>如果用指针p遍历链表可以表示为：</p>
-<pre><code>//保存初始数据
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">//保存初始数据
 ListNode *x = p -&gt; next;
 ListNode *y = p -&gt; next -&gt; next;
 ListNode *z = p -&gt; next -&gt; next -&gt; next;
@@ -60,7 +60,7 @@ p = p -&gt; next -&gt; next;</code></pre>
 <p>因为要保证链表前最大偶数个节点交换，且不能越界访问，所以需要给while循环加上越界判定`<code>p != nullptr &amp;&amp; p -&gt; next != nullptr &amp;&amp; p -&gt; next -&gt; next != nullptr</code>`</p>
 <h2>总结</h2>
 <p>本体主要实用指针遍历链表。然后通过改变next所指向的节点来来实现节点的位置交换</p>
-<pre><code>class Solution {
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">class Solution {
 public:
     ListNode* swapPairs(ListNode* head) {
       ListNode *dummy = new ListNode(0, head);
@@ -86,6 +86,6 @@ public:
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261025c"></script>
+<script src="../assets/hl.js?v=20261025d"></script>
 </body>
 </html>

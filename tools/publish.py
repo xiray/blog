@@ -530,7 +530,7 @@ ARTICLE = u"""<!doctype html>
 <meta name="description" content="{excerpt}">
 <meta name="category" content="{category}">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261025c">
+<link rel="stylesheet" href="../assets/style.css?v=20261025d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -570,7 +570,7 @@ ARTICLE = u"""<!doctype html>
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261025c"></script>
+<script src="../assets/hl.js?v=20261025d"></script>
 </body>
 </html>
 """
@@ -1131,8 +1131,10 @@ def _html_text(s):
 
 
 def annotate_code_langs(body_html):
-    """发布前把没标语言的代码块交给 AI 认一遍，结果写进 data-lang。
+    """发布前把没标语言的代码块交给 AI 认一遍，结果写进 data-lang，
+    并打上 data-lang-src="ai"（角标会显示「· AI」，跟作者手写的区分开）。
     静态页面不需要再跑模型，读者打开就是带语言、带角标的高亮。
+    作者自己写了 ```cpp 的块一律信任，不再送模型。
     失败一律静默跳过（没配 key / 断网 / 模型抽风），不影响发布。"""
     if not body_html or "<pre" not in body_html.lower():
         return body_html, 0
@@ -1171,7 +1173,8 @@ def annotate_code_langs(body_html):
         else:
             new_inner = '<code class="language-%s">%s</code>' % (lang, inner)
         out.append(body_html[pos:m.start()])
-        out.append('<pre%s data-lang="%s">%s</pre>' % (attrs, lang, new_inner))
+        out.append('<pre%s data-lang="%s" data-lang-src="ai">%s</pre>'
+                   % (attrs, lang, new_inner))
         pos = m.end()
         done += 1
     out.append(body_html[pos:])

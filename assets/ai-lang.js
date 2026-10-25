@@ -64,6 +64,7 @@
     if (pre.getAttribute("data-lang")) return false;
     pre.setAttribute("data-lang", lang);
     pre.setAttribute("data-lang-src", "ai");
+    if (global.HL && global.HL.tagLang) global.HL.tagLang(pre, lang, "ai");
     var code = codeOf(pre);
     if (code && code.classList) {
       var cls = "language-" + lang;

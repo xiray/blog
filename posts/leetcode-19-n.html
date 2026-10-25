@@ -7,7 +7,7 @@
 <meta name="description" content="LeetCode 19 删除链表的倒数第 N 个结点：双指针法与哑节点边界处理">
 <meta name="category" content="代码编写">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261025c">
+<link rel="stylesheet" href="../assets/style.css?v=20261025d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -54,7 +54,7 @@
 <h4>dummy vs no dummy 对比表</h4>
 <table><thead><tr><th>对比维度</th><th>使用 dummy 节点</th><th>不使用 dummy 节点</th></tr></thead><tbody><tr><td>核心思路</td><td>在 head 前加一个虚拟节点，让每个节点都有前驱</td><td>直接从头节点开始操作，头节点是第一个</td></tr><tr><td>链表结构</td><td>dummy -&gt; head -&gt; ...</td><td>head -&gt; ...</td></tr><tr><td>slow 指针初始位置</td><td>slow = dummy</td><td>slow = head</td></tr><tr><td>删除头节点</td><td>和删除普通节点一样：slow-&gt;next = slow-&gt;next-&gt;next</td><td>必须特殊处理，通常返回 head-&gt;next</td></tr><tr><td>删除普通节点</td><td>slow-&gt;next = slow-&gt;next-&gt;next</td><td>slow-&gt;next = slow-&gt;next-&gt;next</td></tr><tr><td>是否需要特殊判定</td><td>不需要</td><td>删除头节点时需要</td></tr><tr><td>空指针风险</td><td>较低，dummy 保证 slow 始终有前驱，不会空</td><td>删除头节点时容易出错，导致错误</td></tr><tr><td>返回新头节点</td><td>统一返回 dummy-&gt;next</td><td>需要区分是否删除头节点：head 或 head-&gt;next</td></tr><tr><td>代码长度</td><td>略长一点，多一个 dummy 节点</td><td>略短，但需要写 if 更多</td></tr><tr><td>可读性</td><td>逻辑较为清晰</td><td>边界分支多，容易写漏</td></tr><tr><td>时间复杂度</td><td>O(N)</td><td>O(N)</td></tr><tr><td>主要优点</td><td>统一了删头/删普通节点的逻辑</td><td>少一个节点，结构直观</td></tr></tbody></table>
 <h3>完整代码</h3>
-<pre><code> struct ListNode {
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp"> struct ListNode {
   int val;
    ListNode *next;
    ListNode() : val(0), next(nullptr) {}
@@ -87,6 +87,6 @@ public:
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261025c"></script>
+<script src="../assets/hl.js?v=20261025d"></script>
 </body>
 </html>

@@ -436,16 +436,118 @@
     return normLang(guess(text));
   }
 
+  /* ---------------- 语言角标 + 复制按钮 ---------------- */
+  var LABELS = {
+    cpp: "C++", c: "C", cs: "C#", java: "Java", py: "Python", js: "JavaScript",
+    ts: "TypeScript", go: "Go", rust: "Rust", sql: "SQL", sh: "Shell",
+    json: "JSON", html: "HTML", css: "CSS", md: "Markdown", diff: "Diff",
+    php: "PHP", rb: "Ruby", kt: "Kotlin", swift: "Swift", yaml: "YAML"
+  };
+
+  /* 规范 id → 展示名（没登记的就把 id 大写） */
+  function label(lang) {
+    var k = String(lang || "").toLowerCase();
+    return LABELS[k] || k.toUpperCase();
+  }
+
+  /* 把语言写进 pre：data-lang 给分词用，data-lang-label 给角标显示，
+     data-lang-src 记来源（ai / auto / 空=作者自己写的）。
+     注意 auto 推断只写 label、不写 data-lang —— 否则写作台导出 md 时
+     会把「猜出来的语言」当成作者声明写进 ``` 围栏里。 */
+  function tagLang(pre, lang, src) {
+    if (!pre || !lang || lang === "text" || !pre.setAttribute) return;
+    pre.setAttribute("data-lang-label", label(lang));
+    if (src === "auto") return;
+    if (!pre.getAttribute("data-lang")) pre.setAttribute("data-lang", lang);
+    if (src) pre.setAttribute("data-lang-src", src);
+  }
+
+  /* 复制按钮：必须挂到 pre 外面 —— pre 是 overflow-x:auto 的滚动容器，
+     里面的绝对定位元素会跟着横向滚动跑掉。 */
+  function mountCopy(pre) {
+    if (!pre || !pre.parentNode) return;
+    if (pre.getAttribute("data-copy") === "1") return;
+    var box = pre.parentNode;
+    if (!(box.classList && box.classList.contains("code-block"))) {
+      var wrap = document.createElement("div");
+      wrap.className = "code-block";
+      box.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      box = wrap;
+    }
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "code-copy";
+    btn.textContent = "复制";
+    btn.setAttribute("aria-label", "复制代码");
+    box.appendChild(btn);
+    pre.setAttribute("data-copy", "1");
+  }
+
+  function copyText(text, cb) {
+    var ok = function () { cb(true); };
+    var bad = function () { cb(false); };
+    var legacy = function () {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:0;left:-9999px;opacity:0";
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var done = document.execCommand("copy");
+        document.body.removeChild(ta);
+        done ? ok() : bad();
+      } catch (e) { bad(); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok, legacy);
+    } else {
+      legacy();
+    }
+  }
+
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("click", function (e) {
+      var t = e.target;
+      var btn = t && t.closest ? t.closest(".code-copy") : null;
+      if (!btn) return;
+      var box = btn.parentNode;
+      var pre = box ? box.querySelector("pre") : null;
+      if (!pre) return;
+      var code = pre.querySelector("code") || pre;
+      copyText(code.textContent, function (okd) {
+        btn.textContent = okd ? "已复制" : "复制失败";
+        if (okd) btn.classList.add("done");
+        clearTimeout(btn.__t);
+        btn.__t = setTimeout(function () {
+          btn.textContent = "复制";
+          btn.classList.remove("done");
+        }, 1500);
+      });
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+  }
+
   function run(root) {
     var box = root || document;
     var list = box.querySelectorAll ? box.querySelectorAll("pre > code") : [];
     for (var i = 0; i < list.length; i++) {
       var code = list[i];
       var pre = code.parentNode;
-      if (!pre || pre.getAttribute("data-hl") === "1") continue;
+      if (!pre || !pre.getAttribute) continue;
+      if (pre.getAttribute("data-hl") === "1") continue;
       pre.setAttribute("data-hl", "1");
+      var declared = !!(pre.getAttribute("data-lang") ||
+        (code.getAttribute("class") || "").match(LANG_IN_CLASS));
       var lang = langOf(pre, code);
-      if (lang !== "text") paint(code, code.textContent, lang);
+      if (lang !== "text") {
+        tagLang(pre, lang, declared ? pre.getAttribute("data-lang-src") || "" : "auto");
+        paint(code, code.textContent, lang);
+      }
+      mountCopy(pre);
     }
   }
 
@@ -457,6 +559,9 @@
     guess: guess,
     normLang: normLang,
     cleanLangName: cleanLangName,
+    label: label,
+    tagLang: tagLang,
+    mountCopy: mountCopy,
     alias: ALIAS,
     langs: Object.keys(SPEC)
   };
