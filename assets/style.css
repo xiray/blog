@@ -29,7 +29,11 @@
     Consolas, "SFMono-Regular", Menlo, Monaco, "Sarasa Mono SC",
     "Noto Sans Mono CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", monospace;
 
-  --measure: 42rem;
+  /* 正文宽度：42rem 只占 1080p 屏幕的一半，代码块尤其憋屈，放到 52rem。
+     再宽单行汉字就超过 50 个，读起来会串行。 */
+  --measure: 52rem;
+  /* 代码块专用宽度：允许比正文再宽出两个 4rem，长行少横向滚动 */
+  --measure-code: 60rem;
 }
 
 @media (prefers-color-scheme: light) {
@@ -565,6 +569,24 @@ body {
 }
 .code-block > pre {
   margin-top: 0;
+}
+
+/* 代码块比正文再宽一截：长行（比如这堆 while (p && p->next)）在正文宽度里
+   要点三四次横向滚动条才能读完。这里左右各破出，把它撑到 --measure-code。
+   只在够宽的屏幕上破，窄屏跟着正文走，不然会顶到屏幕边。 */
+@media (min-width: 68rem) {
+  .prose .code-block {
+    width: var(--measure-code);
+    max-width: calc(100vw - 4rem);
+    margin-left: calc((100% - min(var(--measure-code), 100vw - 4rem)) / 2);
+  }
+  /* 写作台的预览/编辑器不吃这套：它们在自己的窄容器里，破出去会溢出面板 */
+  #mdPreview .prose .code-block,
+  #richEditor .code-block {
+    width: auto;
+    max-width: none;
+    margin-left: 0;
+  }
 }
 
 /* 复制按钮（hl.js 注入，纯前端，不进正文/不参与导出） */
