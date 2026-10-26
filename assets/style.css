@@ -20,12 +20,14 @@
     "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
-  /* 代码字体刻意排在最后用通用 monospace：
-     Cascadia Code / Consolas 这类编程字体的字宽不是「中文字符的 1/2」，
-     一旦代码行里出现中文，缩进和空格就跟普通字符对不齐（实测 Cascadia 0.853、
-     Consolas 0.909，只有通用 monospace 是 1.000），而且它们自带连字会把
-     -> 渲染成箭头、>= 渲染成 ≥。装了更纱黑体（Sarasa Mono）就用它，同样 2:1。 */
-  --mono: "Sarasa Mono SC", "Sarasa Fixed SC", "Noto Sans Mono CJK SC", monospace;
+  /* 代码块用编程字体，从最像编辑器的往下退：
+     Cascadia（VS Code 自带）→ JetBrains Mono → Fira Code → Consolas（Windows 必有）。
+     连字统一由下面的 font-variant-ligatures:none 关掉，-> 不会变成箭头。
+     中文没有等宽字形时会退到雅黑（Consolas 里没有汉字，逐字回退），
+     比退到宋体/仿宋那种印刷体好看得多。 */
+  --mono: "Cascadia Mono", "Cascadia Code", "JetBrains Mono", "Fira Code",
+    Consolas, "SFMono-Regular", Menlo, Monaco, "Sarasa Mono SC",
+    "Noto Sans Mono CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", monospace;
 
   --measure: 42rem;
 }
@@ -49,6 +51,10 @@
 /* 代码里禁止连字：-> 必须是两个字符，不能变成 →；>= 也不能变 ≥。
    就算系统里只有 Cascadia Code 这类带连字的字体，也不会再串成箭头。 */
 code, pre, kbd, samp, textarea, .mono {
+  /* 统一钉死编程字体：AI 面板的 .code-wrap pre 只声明了字号没声明 family，
+     以前会一路继承到 body 的 sans（汉字落成雅黑/宋体），看起来像正文。
+     放在这条全局规则里，三处界面一个不落。 */
+  font-family: var(--mono);
   font-variant-ligatures: none;
   font-variant-contextual: none;
   font-feature-settings: "liga" 0, "clig" 0, "calt" 0, "dlig" 0;
