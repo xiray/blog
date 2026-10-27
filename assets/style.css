@@ -169,6 +169,8 @@ body {
   letter-spacing: -0.02em;
   margin: 0 0 1.25rem;
   font-weight: 600;
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hero .lede {
@@ -413,6 +415,8 @@ body {
   letter-spacing: -0.01em;
   color: var(--text);
   margin-bottom: 0.35rem;
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .post-list a:hover .title {
@@ -424,6 +428,8 @@ body {
   font-size: 0.9375rem;
   line-height: 1.7;
   color: var(--muted);
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* ---------------------------- 文章页 ---------------------------- */
@@ -443,6 +449,8 @@ body {
   letter-spacing: -0.02em;
   margin: 0.75rem 0 0;
   font-weight: 600;
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .article-meta {
@@ -458,6 +466,11 @@ body {
 
 .prose {
   font-size: 1.0625rem;
+  /* 超长的连续串（长 URL、一长串字母）在容器边缘强制断行，
+     否则会把整页撑出横向滚动条。break-word 是给老浏览器的兜底，
+     后一行 anywhere 才是主用规则（也参与 min-content 计算）。 */
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .prose > * + * {
