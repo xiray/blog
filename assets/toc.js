@@ -81,6 +81,19 @@
     var main = article.closest ? article.closest("main") : null;
     if (main && main.classList) main.classList.add("has-toc");
 
+    /* ---- 放不下就自动收起 ----
+       正文少于 44rem 时，再挤一列 14rem 的目录，两边都难受；
+       量一下容器实际宽度，够就挂上 data-toc="on"，不够就 off（CSS 里整列收起）。
+       这个判断放在 JS 里而不是纯媒体查询，是因为断点取决于实际可用宽度，
+       缩放、滚动条、系统字体大小变了都能重新算。 */
+    var MIN_PROSE = 44, TOC_W = 14, GAP = 3; // 单位 rem
+    function fit() {
+      var fs = parseFloat(global.getComputedStyle(document.documentElement).fontSize) || 16;
+      var need = (MIN_PROSE + TOC_W + GAP) * fs;
+      row.setAttribute("data-toc", row.clientWidth >= need ? "on" : "off");
+    }
+    fit();
+
     /* ---- 滚动时高亮当前小节 ---- */
     var ticking = false;
     function sync() {
@@ -102,7 +115,10 @@
     }
 
     global.addEventListener("scroll", onScroll, { passive: true });
-    global.addEventListener("resize", onScroll, { passive: true });
+    global.addEventListener("resize", function () {
+      fit();          // 宽窄变了要重新决定收不收
+      onScroll();
+    }, { passive: true });
     sync();
   }
 

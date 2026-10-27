@@ -29,11 +29,13 @@
     Consolas, "SFMono-Regular", Menlo, Monaco, "Sarasa Mono SC",
     "Noto Sans Mono CJK SC", "Microsoft YaHei UI", "Microsoft YaHei", monospace;
 
-  /* 正文宽度：42rem 只占 1080p 屏幕的一半，代码块尤其憋屈，放到 52rem。
+  /* 正文宽度：42rem 只占 1080p 屏幕的一半，代码块尤其憋屈，放到 56rem。
      再宽单行汉字就超过 50 个，读起来会串行。 */
-  --measure: 52rem;
+  --measure: 56rem;
   /* 代码块专用宽度：允许比正文再宽出两个 4rem，长行少横向滚动 */
-  --measure-code: 60rem;
+  --measure-code: 64rem;
+  /* 右侧目录那一列的宽度 */
+  --measure-toc: 14rem;
 }
 
 @media (prefers-color-scheme: light) {
@@ -634,7 +636,8 @@ body {
 }
 
 /* ---------------- 文章目录（toc.js 运行时生成） ----------------
-   宽屏把右侧那片空白利用起来：正文宽度不变（大约 49rem），目录占 13rem。
+   正文 + 目录 + 列间距一起算进容器宽度：宽屏时把右边那片空白用起来，
+   正文不再为此被压窄（56rem 比原来的 52rem 还宽）。
    窄屏直接不显示 —— 手机上一屏就那么点地方，目录反而碍事。 */
 .toc { display: none; }
 
@@ -645,13 +648,16 @@ body {
   scroll-margin-top: 5rem;
 }
 
-@media (min-width: 70rem) {
-  .wrap.has-toc { max-width: 68rem; }
+@media (min-width: 64rem) {
+  /* 56rem 正文 + 14rem 目录 + 3rem 列间距 + 两侧各 1.5rem 内边距 */
+  .wrap.has-toc {
+    max-width: calc(var(--measure) + var(--measure-toc) + 6rem);
+  }
 
   .wrap.has-toc .article-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 13rem;
-    gap: 2.75rem;
+    grid-template-columns: minmax(0, 1fr) var(--measure-toc);
+    gap: 3rem;
     align-items: start;
   }
 
@@ -664,6 +670,27 @@ body {
     overflow-y: auto;
     font-size: 0.8125rem;
     line-height: 1.55;
+  }
+
+  /* 目录在的时候，代码块只能往列间距里探一点（左右各 1.25rem，间距有 3rem），
+     绝对不许越过目录那一列 —— 之前按 64rem 硬撑，右侧直接压到目录文字上。 */
+  .wrap.has-toc .prose .code-block {
+    width: calc(100% + 2.5rem);
+    max-width: calc(100vw - 4rem);
+    margin-left: -1.25rem;
+  }
+
+  /* toc.js 量出「这一列放不下目录」时会把 data-toc 置成 off：
+     整列收起，正文一个人占满，宁可不显示也不叠字。 */
+  .wrap.has-toc .article-row[data-toc="off"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .wrap.has-toc .article-row[data-toc="off"] .toc { display: none; }
+  .wrap.has-toc .article-row[data-toc="off"] .prose .code-block {
+    width: var(--measure-code);
+    max-width: calc(100vw - 4rem);
+    margin-left: calc((100% - min(var(--measure-code), 100vw - 4rem)) / 2);
   }
 }
 
