@@ -75,7 +75,11 @@
     if (global.HL && code) {
       // 光标正在这个块里编辑时不要动 DOM，只记语言，离开时 paintPre 会用它
       if (pre.classList && pre.classList.contains("editing")) return true;
-      HL.paint(code, code.textContent, lang);
+      /* 已经上过色的块 textContent 是没有换行的（行被拆成了 .cl），
+         必须读 __hlRaw 里的原文，否则重绘会把整块挤成一行 */
+      var raw = code.__hlRaw != null ? code.__hlRaw : code.textContent;
+      if (HL.paintLines) HL.paintLines(code, raw, lang);
+      else HL.paint(code, raw, lang);
       pre.setAttribute("data-hl", "1");
       pre.classList.add("hl-on");
       pre.classList.remove("editing");

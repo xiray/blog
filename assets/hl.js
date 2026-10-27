@@ -406,6 +406,57 @@
     }
     while (el.firstChild) el.removeChild(el.firstChild);
     el.appendChild(frag);
+    el.__hlRaw = text;
+  }
+
+  /* 带行号的版本：每行一个 .cl 块，行号由 CSS 的 counter 画在 ::before 里。
+     两个要点：
+     1) 换行符本身不写进 DOM，所以 textContent 会「挤成一行」——
+        复制按钮因此优先读 el.__hlRaw（原文），不能直接用 textContent。
+     2) 空行要塞一个零宽空格，否则 .cl 没有行盒，高度塌成 0。 */
+  function paintLines(el, text, lang) {
+    var toks = tokens(text, lang);
+    var frag = document.createDocumentFragment();
+    var line = document.createElement("span");
+    line.className = "cl";
+    frag.appendChild(line);
+
+    for (var i = 0; i < toks.length; i++) {
+      var tk = toks[i];
+      var parts = String(tk.s).split("\n");
+      for (var j = 0; j < parts.length; j++) {
+        if (j > 0) {
+          line = document.createElement("span");
+          line.className = "cl";
+          frag.appendChild(line);
+        }
+        if (!parts[j]) continue;
+        if (!tk.t) {
+          line.appendChild(document.createTextNode(parts[j]));
+        } else {
+          var sp = document.createElement("span");
+          sp.className = "t-" + tk.t;
+          sp.textContent = parts[j];
+          line.appendChild(sp);
+        }
+      }
+    }
+
+    /* 原文以换行结尾时，最后会多出一个空行，去掉它（编辑器也不显示这一行号） */
+    var last = frag.lastChild;
+    if (last && !last.textContent && frag.childNodes.length > 1) frag.removeChild(last);
+
+    var lines = frag.querySelectorAll(".cl");
+    for (var k = 0; k < lines.length; k++) {
+      if (!lines[k].firstChild) lines[k].appendChild(document.createTextNode("\u200b"));
+    }
+
+    while (el.firstChild) el.removeChild(el.firstChild);
+    el.appendChild(frag);
+    el.__hlRaw = text;
+
+    var pre = el.parentNode;
+    if (pre && pre.setAttribute) pre.setAttribute("data-lines", "1");
   }
 
   var LANG_IN_CLASS = /language-([\w+#.\u4e00-\u9fa5-]+)/i;
@@ -524,7 +575,9 @@
       var pre = box ? box.querySelector("pre") : null;
       if (!pre) return;
       var code = pre.querySelector("code") || pre;
-      copyText(code.textContent, function (okd) {
+      /* 带行号渲染后 textContent 是没有换行的，必须读原文缓存 */
+      var raw = code.__hlRaw != null ? code.__hlRaw : code.textContent;
+      copyText(raw, function (okd) {
         btn.textContent = okd ? "已复制" : "复制失败";
         if (okd) btn.classList.add("done");
         clearTimeout(btn.__t);
@@ -552,7 +605,7 @@
       var lang = langOf(pre, code);
       if (lang !== "text") {
         tagLang(pre, lang, declared ? pre.getAttribute("data-lang-src") || "" : "auto");
-        paint(code, code.textContent, lang);
+        paintLines(code, code.textContent, lang);
       }
       mountCopy(pre);
     }
@@ -561,6 +614,7 @@
   var HL = {
     tokens: tokens,
     paint: paint,
+    paintLines: paintLines,
     run: run,
     langOf: langOf,
     guess: guess,
