@@ -7,7 +7,7 @@
 <meta name="description" content="leetcode-17 一道看似简单却有重重陷阱的题">
 <meta name="category" content="代码编写">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261027c">
+<link rel="stylesheet" href="../assets/style.css?v=20261027d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -38,13 +38,13 @@
 <h3>1.重复枚举</h3>
 <blockquote><p>给定一个仅包含数字 2-9 的字符串，返回所有它能表示的字母组合</p></blockquote>
 <p>因为电话号码的位数<span style="color: rgb(255, 0, 0)">不确定</span>，所以正常的循环嵌套不能使用，需要用<span style="font-weight: bold">递归</span>：先枚举第一位，再调用函数本身枚举第2位，以此类推。</p>
-<pre><code>结构为：
+<pre data-lang="text"><code class="language-text">结构为：
 f(str, i)   i &lt; n ?    true:     f(str, i + 1)
                        false:    return</code></pre>
 <p>但是每次枚举完，本轮的上一个答案因为没有删除字符串的末尾，所以会造成多个字母的连接，导致WA，所以每次枚举完需要pop_back 掉枚举出来的字符串的最后一位，保证枚举的结果不重叠。</p>
 <h3>2.类型错误</h3>
 <p>判定电话号码的第几位不能直接使用，因为他的格式是char，转换为int会导致索引出错，如字符'1'的ASCII编码为49，而实际使用的应为1。因为连个字符之间可以直接相减得到对应的编码，且0~9的编码是连续的，所以可以令int a = '1' - '0'，把char类型的数字转为int类型。</p>
-<pre><code>(int)'1' = 49
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">(int)'1' = 49
 (int)'0' = 48
 '1' - '0' =1
 所以可建立函数：
@@ -56,7 +56,7 @@ int to_int(char a) {
 输出：7      '7' - '0' = 55 - 48 = 7</code></pre>
 <h3>3.总结</h3>
 <p>这道题我主要使用递归的方法实现，枚举每位字母，实现方法如下：</p>
-<pre><code>#include&lt;bits/stdc++.h&gt;
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">#include&lt;bits/stdc++.h&gt;
 using namespace std;
 class Solution {
 public:
@@ -90,7 +90,7 @@ public:
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261027c"></script>
-<script src="../assets/toc.js?v=20261027c"></script>
+<script src="../assets/hl.js?v=20261027d"></script>
+<script src="../assets/toc.js?v=20261027d"></script>
 </body>
 </html>

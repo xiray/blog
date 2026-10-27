@@ -772,6 +772,47 @@ body {
   .code-copy { display: none; }
 }
 
+/* 长代码折叠（hl.js 注入，超过 20 行才出现）
+   只裁可视高度，代码本身一行没删；高度由 JS 按行高算好（--fold-h），
+   正好停在整行边界上，不会切出半个字。 */
+.code-block > pre[data-fold="1"]:not([data-fold-open="1"]) {
+  max-height: var(--fold-h, 36rem);
+  overflow-y: hidden;
+  /* 折叠时去掉下内边距：overflow 的裁剪边界是 padding box，留着这块空隙
+     会把第 21 行露出来半截，切口正好卡在字的腰上。 */
+  padding-bottom: 0;
+}
+.code-fold {
+  display: block;
+  margin: 0.55rem auto 0;
+  padding: 0.34rem 0.85rem;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--muted);
+  background: var(--code-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.code-fold:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+.code-fold:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  outline: none;
+}
+@media print {
+  .code-fold { display: none; }
+  .code-block > pre[data-fold="1"] {
+    max-height: none;
+    overflow-y: auto;
+  }
+}
+
 /* 左上角的语言角标：来自 <pre data-lang="cpp"> + data-lang-label="C++"
    （作者写的、AI 认的、正则推的都会显示，label 由 hl.js 补） */
 .prose pre[data-lang-label]::after,
@@ -793,10 +834,10 @@ body {
   user-select: none;
 }
 /* AI 认出来的多一个小圆点，跟作者手写的区分开 */
-.prose pre[data-lang-src="ai"]::after,
-#mdPreview pre[data-lang-src="ai"]::after,
-#richEditor pre[data-lang-src="ai"]::after,
-.code-wrap pre[data-lang-src="ai"]::after {
+.prose pre[data-lang-src="ai"][data-lang-label]::after,
+#mdPreview pre[data-lang-src="ai"][data-lang-label]::after,
+#richEditor pre[data-lang-src="ai"][data-lang-label]::after,
+.code-wrap pre[data-lang-src="ai"][data-lang-label]::after {
   content: attr(data-lang-label) " · AI";
   opacity: 0.7;
 }
@@ -933,6 +974,16 @@ pre .t-fence, pre .t-hr { color: var(--hl-com); }
 
 .prose tr:hover td {
   background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+}
+
+/* 窄屏上宽表格别把整页撑出横向滚动条：表格自己变成滚动容器，
+   页面别的部分原地不动。列宽照常按内容算，只是超出部分滚而不是溢出。 */
+@media (max-width: 45rem) {
+  .prose table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
 }
 
 /* 附件卡片 */

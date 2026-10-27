@@ -515,6 +515,57 @@
 
   /* 复制按钮：必须挂到 pre 外面 —— pre 是 overflow-x:auto 的滚动容器，
      里面的绝对定位元素会跟着横向滚动跑掉。 */
+  /* 长代码折叠：超过 FOLD_MIN 行的块默认只露前 FOLD_MIN 行，下面挂一个
+     「展开全部 · N 行」。纯 CSS 裁剪，DOM 里的代码一行没少 —— 复制走
+     __hlRaw，展开与否拷到的都是完整代码；行号也算在裁剪里，不会错位。
+     写作台的预览/编辑器不折，那儿本来就是边写边看。 */
+  var FOLD_MIN = 20;
+
+  function mountFold(pre) {
+    if (!pre || !pre.parentNode) return;
+    if (pre.getAttribute("data-fold")) return;
+    if (pre.closest && pre.closest("#mdPreview, #richEditor, #aiBody")) return;
+    var lines = pre.querySelectorAll(".cl").length;
+    if (!lines) {
+      /* 纯文本块没有 .cl（不上色就不画行号），按原文行数算 */
+      var codeEl = pre.querySelector("code") || pre;
+      var rawTxt = codeEl.__hlRaw != null ? codeEl.__hlRaw : codeEl.textContent;
+      lines = String(rawTxt).replace(/\n+$/, "").split("\n").length;
+    }
+    if (lines < FOLD_MIN) return;
+    var box = pre.parentNode;
+    if (!(box.classList && box.classList.contains("code-block"))) return;
+
+    pre.setAttribute("data-fold", "1");
+    /* 高度按实际行高和 padding 算，别写死 —— 有语言角标的块顶 padding 比
+       普通块大 0.6rem，写死就会漏出第 21 行的一条边。 */
+    var cs = window.getComputedStyle(pre);
+    var lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.7;
+    /* 只算上内边距和上下边框：折叠时下内边距被 CSS 归零（否则会漏出半行） */
+    var pad = parseFloat(cs.paddingTop) +
+      parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    pre.style.setProperty("--fold-h", Math.round(FOLD_MIN * lh + pad) + "px");
+
+    var bar = document.createElement("button");
+    bar.type = "button";
+    bar.className = "code-fold";
+    bar.setAttribute("aria-expanded", "false");
+    bar.textContent = "展开全部 · " + lines + " 行";
+    bar.addEventListener("click", function () {
+      var open = pre.getAttribute("data-fold-open") === "1";
+      if (open) {
+        pre.removeAttribute("data-fold-open");
+        bar.setAttribute("aria-expanded", "false");
+        bar.textContent = "展开全部 · " + lines + " 行";
+      } else {
+        pre.setAttribute("data-fold-open", "1");
+        bar.setAttribute("aria-expanded", "true");
+        bar.textContent = "收起";
+      }
+    });
+    box.appendChild(bar);
+  }
+
   function mountCopy(pre) {
     if (!pre || !pre.parentNode) return;
     if (pre.getAttribute("data-copy") === "1") return;
@@ -608,6 +659,7 @@
         paintLines(code, code.textContent, lang);
       }
       mountCopy(pre);
+      mountFold(pre);
     }
   }
 
@@ -623,6 +675,7 @@
     label: label,
     tagLang: tagLang,
     mountCopy: mountCopy,
+    mountFold: mountFold,
     alias: ALIAS,
     langs: Object.keys(SPEC)
   };

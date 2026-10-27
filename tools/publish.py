@@ -530,7 +530,7 @@ ARTICLE = u"""<!doctype html>
 <meta name="description" content="{excerpt}">
 <meta name="category" content="{category}">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261027c">
+<link rel="stylesheet" href="../assets/style.css?v=20261027d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -570,8 +570,8 @@ ARTICLE = u"""<!doctype html>
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261027c"></script>
-<script src="../assets/toc.js?v=20261027c"></script>
+<script src="../assets/hl.js?v=20261027d"></script>
+<script src="../assets/toc.js?v=20261027d"></script>
 </body>
 </html>
 """
@@ -1164,9 +1164,14 @@ def annotate_code_langs(body_html):
 
     out, pos, done = [], 0, 0
     for (m, _text), lang in zip(targets, langs):
-        if lang == "text":
-            continue
         attrs, inner = m.group(1), m.group(2)
+        # 伪代码 / 示意图：明确标成纯文本，别留给正则去猜（否则会被认成某种语言）
+        if lang in ("text", "plain", "plaintext", "txt"):
+            out.append(body_html[pos:m.start()])
+            out.append('<pre%s data-lang="text">%s</pre>' % (attrs, inner))
+            pos = m.end()
+            done += 1
+            continue
         new_inner = inner
         if re.search(r"<code\b", inner, re.I):
             new_inner = re.sub(r"<code\b", '<code class="language-%s"' % lang,

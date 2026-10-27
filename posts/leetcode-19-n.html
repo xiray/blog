@@ -7,7 +7,7 @@
 <meta name="description" content="LeetCode 19 删除链表的倒数第 N 个结点：双指针法与哑节点边界处理">
 <meta name="category" content="代码编写">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261027c">
+<link rel="stylesheet" href="../assets/style.css?v=20261027d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -43,7 +43,7 @@
 <p>因为链表的节点结构为 <code>int val; ListNode *next;</code>，只能正向遍历，无法直接找到倒数第几个节点，需要通过两个距相差 n 个节点的两个指针（fast 和 slow）来实现。先让 fast 运动 n 个节点，然后两个指针一起运动，直到 fast 到达链表最后一个节点（<code>fast-&gt;next == nullptr</code>），即 slow 到达倒数第 n+1 个节点。</p>
 <h3>修改链表指针</h3>
 <p>将 slow 所在节点的 next 跳过待删除节点（倒数第 n 个节点），直接链接到被删节点的下一个节点，即倒数第 n-1 个节点：</p>
-<pre><code>    slow -&gt; next = slow -&gt; next -&gt; next; 
+<pre data-lang="text"><code class="language-text">    slow -&gt; next = slow -&gt; next -&gt; next; 
        ↑       ↑                     ↑
     倒数n+1  倒数n                  倒数n-1
 
@@ -87,7 +87,7 @@ public:
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261027c"></script>
-<script src="../assets/toc.js?v=20261027c"></script>
+<script src="../assets/hl.js?v=20261027d"></script>
+<script src="../assets/toc.js?v=20261027d"></script>
 </body>
 </html>
