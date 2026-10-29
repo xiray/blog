@@ -184,9 +184,25 @@ def find_proxy(force=False):
 
 # ================================================================ git
 
+def _no_window_kwargs():
+    """控制台子进程（git 等）的隐藏参数。
+
+    写作台常被无窗口进程拉起（Flow 插件的 blog write、计划任务），
+    这时父进程没有控制台，Windows 会给 git 新建一个 —— 屏幕上就是一闪的黑框。
+    统一加 CREATE_NO_WINDOW + SW_HIDE，彻底不放窗口出来。
+    """
+    if os.name != "nt":
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0  # SW_HIDE
+    return {"creationflags": 0x08000000, "startupinfo": si}
+
+
 def run_git(args, timeout=120):
     try:
-        r = subprocess.run(["git", "-C", ROOT] + args, capture_output=True, timeout=timeout)
+        r = subprocess.run(["git", "-C", ROOT] + args, capture_output=True,
+                           timeout=timeout, **_no_window_kwargs())
         return (r.returncode,
                 (r.stdout or b"").decode("utf-8", "replace"),
                 (r.stderr or b"").decode("utf-8", "replace"))
