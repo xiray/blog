@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetCode 24 两两交换链表中的节点：哨兵节点 + 改 next 指针 — xiray</title>
+<meta name="description" content="不能改 val，只能改节点的 next。先用 dummy head 消除头节点特判，再分三步修改指针完成相邻节点交换，并用循环条件保证不越界。">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css?v=20261027d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>LeetCode 24 两两交换链表中的节点：哨兵节点 + 改 next 指针</h1>
+      <p class="article-meta">2026 · 10 · 25
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 2 分钟</p>
+    </header>
+
+    <div class="prose">
+<h2>整体思路</h2>
+<blockquote><p>给你一个链表，两两交换其中相邻的节点，并返回交换后链表的头节点。你必须在不修改节点内部的值的情况下完成本题（即，<strong>只能进行节点交换</strong>）  </p></blockquote>
+<p>因为不能改变节点的val，只能改变节点<strong>所指向的下一个节点</strong>从而进行节点交换。</p>
+<h2>哨兵节点</h2>
+<p>因为头节点的改变需要特殊判定，逻辑复杂，所以为了保证每个要改变的节点都不是第一个，要在head前面加一个节点，即dummy head，方便函数调用。</p>
+<h2>交换next思路</h2>
+<p>设子链表为<code>a → b → c → d</code>，交换b, c,需要改变三处：</p>
+<ul><li>a -&gt; next 从指向b改为指向c</li><li>b -&gt; next 从指向c改为指向d</li><li>c -&gt; next 从指向d改为指向b  </li></ul>
+<p>如果用指针p遍历链表可以表示为：</p>
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">//保存初始数据
+ListNode *x = p -&gt; next;
+ListNode *y = p -&gt; next -&gt; next;
+ListNode *z = p -&gt; next -&gt; next -&gt; next;
+
+//改变next
+p -&gt; next = y;
+p -&gt; next -&gt; next = x;
+p -&gt; next -&gt; next -&gt; next= z;
+
+//因为一次性交换两个节点，所以p每次跳过1个节点
+p = p -&gt; next -&gt; next;</code></pre>
+<h2>循环条件</h2>
+<p>因为要保证链表前最大偶数个节点交换，且不能越界访问，所以需要给while循环加上越界判定`<code>p != nullptr &amp;&amp; p -&gt; next != nullptr &amp;&amp; p -&gt; next -&gt; next != nullptr</code>`</p>
+<h2>总结</h2>
+<p>本体主要实用指针遍历链表。然后通过改变next所指向的节点来来实现节点的位置交换</p>
+<pre data-lang="cpp" data-lang-src="ai"><code class="language-cpp">class Solution {
+public:
+    ListNode* swapPairs(ListNode* head) {
+      ListNode *dummy = new ListNode(0, head);
+      ListNode *p = dummy;
+      while (p != nullptr &amp;&amp; p -&gt; next != nullptr &amp;&amp; p -&gt; next -&gt; next != nullptr) {
+        ListNode *a = p -&gt; next, *b = p -&gt; next -&gt; next, *c = p -&gt; next -&gt; next -&gt; next;
+        p -&gt; next = b;
+        p -&gt; next -&gt; next = a;
+        p -&gt; next -&gt; next -&gt; next= c;
+        p = p -&gt; next -&gt; next;
+      }
+      return dummy -&gt; next;
+    }
+};</code></pre>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+<script src="../assets/hl.js?v=20261027d"></script>
+<script src="../assets/toc.js?v=20261027d"></script>
+</body>
+</html>
