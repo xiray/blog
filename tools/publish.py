@@ -546,7 +546,7 @@ ARTICLE = u"""<!doctype html>
 <meta name="description" content="{excerpt}">
 <meta name="category" content="{category}">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="../assets/style.css?v=20261105c">
+<link rel="stylesheet" href="../assets/style.css?v=20261105d">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -586,8 +586,8 @@ ARTICLE = u"""<!doctype html>
   </div>
 </footer>
 
-<script src="../assets/hl.js?v=20261105c"></script>
-<script src="../assets/toc.js?v=20261105c"></script>
+<script src="../assets/hl.js?v=20261105d"></script>
+<script src="../assets/toc.js?v=20261105d"></script>
 </body>
 </html>
 """

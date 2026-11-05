@@ -161,7 +161,7 @@ body {
 /* ---------------------------- 首页 hero ---------------------------- */
 
 .hero {
-  padding: 5rem 0 1.75rem;
+  padding: 5rem 0 1.25rem;
 }
 
 .hero h1 {
@@ -191,30 +191,9 @@ body {
   max-width: 34em;
 }
 
-/* ---------------------------- 分区标题 ---------------------------- */
-
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  margin: 1.75rem 0 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.section-label::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
-
 /* ---------------------------- 搜索与筛选 ----------------------------
    按钮挪到页头右上角（导航右边），默认只占一个小胶囊；
-   点开才从页头下方掉出面板，绝对定位，不撑高 header、不推正文。
+   点开才从页头下方掉出面板，走正常文档流（把正文顶下去），
    收起时筛选依然生效，按钮上挂个 3/12 的数字，免得看起来像丢文章。 */
 
 .head-end {
@@ -413,7 +392,7 @@ body {
 
 .post-list {
   list-style: none;
-  margin: 1rem 0 0;
+  margin: 0.75rem 0 0;
   padding: 0;
 }
 
@@ -1208,7 +1187,7 @@ pre .t-fence, pre .t-hr { color: var(--hl-com); }
   }
 
   .hero {
-    padding: 3.25rem 0 1.5rem;
+    padding: 3.25rem 0 1.25rem;
   }
 
   .nav {
