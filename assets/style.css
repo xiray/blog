@@ -161,7 +161,7 @@ body {
 /* ---------------------------- 首页 hero ---------------------------- */
 
 .hero {
-  padding: 5rem 0 3.5rem;
+  padding: 5rem 0 1.75rem;
 }
 
 .hero h1 {
@@ -197,7 +197,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  margin: 2.5rem 0 0;
+  margin: 1.75rem 0 0;
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -413,7 +413,7 @@ body {
 
 .post-list {
   list-style: none;
-  margin: 1.5rem 0 0;
+  margin: 1rem 0 0;
   padding: 0;
 }
 
@@ -1208,7 +1208,7 @@ pre .t-fence, pre .t-hr { color: var(--hl-com); }
   }
 
   .hero {
-    padding: 3.25rem 0 2.5rem;
+    padding: 3.25rem 0 1.5rem;
   }
 
   .nav {
