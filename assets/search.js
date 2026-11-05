@@ -16,8 +16,29 @@
   var dateTo = document.getElementById("dateTo");
   var resultCount = document.getElementById("resultCount");
   var noResult = document.getElementById("noResult");
+  var toggle = document.getElementById("searchToggle");
+  var panel = document.getElementById("searchPanel");
+  var badge = document.getElementById("searchBadge");
+  var resetBtn = document.getElementById("searchReset");
 
   if (!list || !input) return;
+
+  /* ---------------- 展开 / 收起 ----------------
+     搜索默认收在按钮里，点开才展开面板。收起不改变筛选结果，
+     只在按钮上留个「3/12」的角标，让人知道列表为什么变短了。 */
+
+  function isOpen() { return panel ? !panel.hidden : true; }
+
+  function setOpen(open) {
+    if (panel) panel.hidden = !open;
+    if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open && input) {
+      // preventScroll：展开时不要连带把页面滚一下
+      setTimeout(function () {
+        try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+      }, 20);
+    }
+  }
 
   var items = Array.prototype.slice.call(list.querySelectorAll("li[data-slug]"));
   var indexMap = {};
@@ -63,7 +84,10 @@
       catFilter.innerHTML = html;
       if (current) catFilter.value = current;
       var fromUrl = new URLSearchParams(location.search).get("cat");
-      if (fromUrl && !current) catFilter.value = fromUrl;
+      if (fromUrl && !current) {
+        catFilter.value = fromUrl;
+        apply();
+      }
     }
 
     fetch("categories.json", { cache: "no-cache" })
@@ -134,6 +158,14 @@
         : "";
     }
     if (clearBtn) clearBtn.hidden = !kw;
+
+    /* 收起状态下也得能看出「现在是筛过的」 */
+    if (badge) {
+      badge.hidden = !filtering;
+      badge.textContent = filtering ? shown + "/" + items.length : "";
+    }
+    if (toggle) toggle.classList.toggle("is-active", filtering);
+    if (resetBtn) resetBtn.hidden = !filtering;
   }
 
   /* ---------------- 事件 ---------------- */
@@ -160,18 +192,48 @@
     });
   }
 
+  if (toggle) {
+    toggle.addEventListener("click", function () {
+      setOpen(!isOpen());
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      input.value = "";
+      catFilter.value = "";
+      dateFrom.value = "";
+      dateTo.value = "";
+      apply();
+      input.focus();
+    });
+  }
+
   document.addEventListener("keydown", function (e) {
     if (e.key === "/" && document.activeElement !== input) {
       e.preventDefault();
-      input.focus();
+      setOpen(true);
     }
-    if (e.key === "Escape" && document.activeElement === input) {
-      input.value = "";
-      apply();
+    if (e.key === "Escape") {
+      if (document.activeElement === input && input.value) {
+        input.value = "";
+        apply();
+      } else if (isOpen()) {
+        setOpen(false);
+        if (toggle) toggle.focus();
+      }
     }
   });
 
   /* ---------------- 启动 ---------------- */
+
+  /* 从别处带着 ?cat= 或 ?q= 进来时直接展开，不然筛选生效了却看不见原因 */
+  var params = new URLSearchParams(location.search);
+  if (params.get("cat") || params.get("q")) setOpen(true);
+  if (params.get("q")) {
+    input.value = params.get("q");
+    ensureIndex().then(apply);
+  }
 
   fillCategories();
   apply();

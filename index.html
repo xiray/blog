@@ -6,7 +6,7 @@
 <title>xiray — 写代码，做东西，偶尔记录</title>
 <meta name="description" content="xiray 的个人博客：浏览器扩展、小游戏、和一些没用的东西。">
 <meta name="color-scheme" content="dark light">
-<link rel="stylesheet" href="assets/style.css?v=20261027d">
+<link rel="stylesheet" href="assets/style.css?v=20261105a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
 </head>
 <body>
@@ -30,20 +30,30 @@
     <p class="sub">大多数时候在 Windows 上折腾。喜欢能跑起来、点得开、看得见的东西。</p>
   </section>
 
-  <div class="search-bar">
-    <div class="search-input-wrap">
-      <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.2-4.2"></path></svg></span>
-      <input type="search" id="searchInput" placeholder="搜索标题、正文、类别…" autocomplete="off" spellcheck="false">
-      <button class="search-clear" id="searchClear" title="清空" hidden>✕</button>
-    </div>
-    <div class="filters">
-      <select id="catFilter"><option value="">全部类别</option></select>
-      <div class="date-range">
-        <input type="date" id="dateFrom" title="起始日期">
-        <span class="dash">→</span>
-        <input type="date" id="dateTo" title="结束日期">
+  <div class="search-dock">
+    <button class="search-toggle" id="searchToggle" type="button" aria-expanded="false" aria-controls="searchPanel">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+      <span>搜索</span>
+      <span class="search-badge" id="searchBadge" hidden></span>
+    </button>
+    <span class="search-hint">按 <kbd>/</kbd> 打开</span>
+
+    <div class="search-panel" id="searchPanel" hidden>
+      <div class="search-input-wrap">
+        <span class="search-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4.2-4.2"></path></svg></span>
+        <input type="search" id="searchInput" placeholder="搜索标题、正文、类别…" autocomplete="off" spellcheck="false">
+        <button class="search-clear" id="searchClear" title="清空关键词" hidden>✕</button>
       </div>
-      <span class="result-count" id="resultCount"></span>
+      <div class="filters">
+        <select id="catFilter"><option value="">全部类别</option></select>
+        <div class="date-range">
+          <input type="date" id="dateFrom" title="起始日期">
+          <span class="dash">→</span>
+          <input type="date" id="dateTo" title="结束日期">
+        </div>
+        <button class="search-reset" id="searchReset" type="button" hidden>重置筛选</button>
+        <span class="result-count" id="resultCount"></span>
+      </div>
     </div>
   </div>
 
@@ -96,6 +106,6 @@
   </div>
 </footer>
 
-<script src="assets/search.js"></script>
+<script src="assets/search.js?v=20261105a"></script>
 </body>
 </html>

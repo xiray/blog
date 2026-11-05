@@ -212,13 +212,93 @@ body {
   background: var(--line);
 }
 
-/* ---------------------------- 搜索与筛选 ---------------------------- */
+/* ---------------------------- 搜索与筛选 ----------------------------
+   默认只留一个「搜索」按钮，点开才展开输入框和筛选条件。
+   收起时筛选依然生效，按钮上挂个 3/12 的数字提示，免得看起来像丢文章。 */
 
-.search-bar {
+.search-dock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
   margin: 0 0 0.5rem;
-  padding: 1rem 0 1.25rem;
+  padding: 0.75rem 0;
   border-top: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
+}
+
+.search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.search-toggle svg { opacity: 0.85; }
+
+.search-toggle:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.search-toggle[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--bg-soft);
+}
+
+.search-toggle.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.search-badge {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  color: inherit;
+  opacity: 0.9;
+}
+
+.search-hint {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.search-hint kbd {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}
+
+@media (max-width: 40rem) {
+  .search-hint { display: none; }
+}
+
+.search-panel {
+  flex-basis: 100%;
+  padding-top: 0.25rem;
+}
+
+.search-panel:not([hidden]) { animation: searchIn 0.16s ease; }
+
+@keyframes searchIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-panel:not([hidden]) { animation: none; }
 }
 
 .search-input-wrap {
@@ -306,6 +386,24 @@ body {
 }
 
 .date-range .dash { color: var(--muted); font-size: 0.75rem; }
+
+.search-reset {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 0.28rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.search-reset:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
+}
 
 .result-count {
   font-family: var(--mono);
