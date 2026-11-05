@@ -198,6 +198,13 @@
     });
   }
 
+  /* 面板是浮在正文上方的，点页面其它地方就收起来 */
+  document.addEventListener("click", function (e) {
+    if (!isOpen()) return;
+    if (e.target.closest && e.target.closest(".site-header")) return;
+    setOpen(false);
+  });
+
   if (resetBtn) {
     resetBtn.addEventListener("click", function () {
       input.value = "";

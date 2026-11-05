@@ -114,7 +114,7 @@ body {
   border-bottom: 1px solid var(--line-soft);
 }
 
-.site-header .wrap {
+.site-header > .wrap {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -213,31 +213,27 @@ body {
 }
 
 /* ---------------------------- 搜索与筛选 ----------------------------
-   默认只留一个「搜索」按钮，点开才展开输入框和筛选条件。
-   收起时筛选依然生效，按钮上挂个 3/12 的数字提示，免得看起来像丢文章。 */
+   按钮挪到页头右上角（导航右边），默认只占一个小胶囊；
+   点开才从页头下方掉出面板，绝对定位，不撑高 header、不推正文。
+   收起时筛选依然生效，按钮上挂个 3/12 的数字，免得看起来像丢文章。 */
 
-.search-dock {
+.head-end {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin: 0 0 0.5rem;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
+  gap: 1.25rem;
 }
 
 .search-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   font: inherit;
   font-size: 0.8125rem;
   color: var(--text-dim);
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0.35rem 0.8rem;
+  padding: 0.3rem 0.7rem;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
@@ -267,30 +263,23 @@ body {
   opacity: 0.9;
 }
 
-.search-hint {
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.search-hint kbd {
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 0.25rem;
-}
-
-@media (max-width: 40rem) {
-  .search-hint { display: none; }
-}
-
+/* 面板跟在页头下面、占正常文档流：展开时把正文顶下去，不盖住标题。
+   （试过绝对定位浮在正文上，停在页面顶部时会把大标题切成两半，很别扭。） */
 .search-panel {
-  flex-basis: 100%;
-  padding-top: 0.25rem;
+  padding: 0.9rem 0 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .search-panel:not([hidden]) { animation: searchIn 0.16s ease; }
+
+@media (max-width: 40rem) {
+  .head-end { gap: 0.9rem; }
+  .nav { gap: 1rem; }
+  /* 窄屏只留图标，别把导航挤换行 */
+  .search-toggle-text { display: none; }
+  .search-toggle { padding: 0.35rem 0.55rem; }
+}
 
 @keyframes searchIn {
   from { opacity: 0; transform: translateY(-4px); }
