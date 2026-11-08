@@ -811,15 +811,20 @@
 
   function agentPrompt(c) {
     var text = String((c && c.text) || "").trim();
-    var cut = text.length > REF_MAX ? text.slice(0, REF_MAX) : text;
+    var tooLong = text.length > REF_MAX;
+    var cut = tooLong ? text.slice(0, REF_MAX) : text;
     return "你是写作台里的文章编辑助手，可以直接改用户正在写的这篇文章。\n" +
+      "正文是 Markdown 原文（标题 #、列表 -、粗体 **、代码块 ```语言 围栏），不是 HTML。\n" +
       "当前文章：\n标题：" + ((c && c.title) || "（未命名）") + "\n" +
       "短名（slug）：" + ((c && c.slug) || "（还没定）") + "\n" +
       "类别：" + ((c && c.category) || "未分类") + "\n" +
       "日期：" + ((c && c.date) || "") + "\n" +
       "篇幅：约 " + text.length + " 字符\n" +
-      (text ? "---------- 正文开始 ----------\n" + cut + "\n---------- 正文结束 ----------\n\n"
-            : "（正文现在是空的）\n\n") +
+      (text ? "---------- 正文开始 ----------\n" + cut + "\n---------- 正文结束 ----------\n"
+            : "（正文现在是空的）\n") +
+      (tooLong ? "（正文比上面给出的长，后面还有内容没显示。所以**不要**用 replace_md 整篇重写，" +
+                 "否则会把没显示的部分删掉；这种长文只用 append_md 追加，或 set_meta 改元信息。）\n" : "") +
+      "\n" +
       "你能执行的动作只有这五种：\n" +
       "1. {\"op\":\"set_meta\",\"title\":\"…\",\"excerpt\":\"…\",\"category\":\"…\",\"slug\":\"…\",\"date\":\"YYYY-MM-DD\"} 只写要改的字段\n" +
       "2. {\"op\":\"append_md\",\"md\":\"## 小节标题\\n\\n正文…\"} 在正文末尾追加一段 Markdown\n" +
@@ -840,6 +845,8 @@
       "每层递归处理 n 个字符，共 n 层，所以是 O(n²)。\n" +
       "[[/WRITER-AGENT]]\n" +
       "- 这个区块**不要**用代码块包起来，**不要**用 JSON；正文里的 ``` 代码块照常写，不会和它冲突；\n" +
+      "- 正文要按 Markdown 原样写：标题用 #、列表用 - 或 1.、粗体用 **、图片用 ![]()，不要写成 HTML 标签；\n" +
+      "- 代码块沿用原来的围栏语言（```cpp / ```python / ```md 这样），不要改成别的语言，也不要删掉围栏；\n" +
       "- 正文里的代码块请在第一行写语言（```cpp / ```python / ```js 这样），写作台会自动上色；\n" +
       "- 正文里引号、反斜杠、箭头、缩进都原样写，不需要任何转义；\n" +
       "- op 只能是 append_md（末尾追加）/ replace_md（整篇重写）/ set_meta（改标题等）/ " +
@@ -872,6 +879,10 @@
     });
 
     var md = body.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
+    // 模型偶尔不听话，会把整篇 Markdown 再套一层 ```markdown … ``` 围栏。
+    // 只认「markdown」这个全称（作者自己的示例一般写 ```md），避免误伤正常的代码块。
+    var wrapped = md.match(/^```(?:markdown)\s*\n([\s\S]*?)\n?```$/);
+    if (wrapped) md = wrapped[1].replace(/\s+$/, "");
     var op = String(head.op || "").toLowerCase().replace(/[\s-]+/g, "_");
     if (!op) {
       if (head.slug) op = "open_post";
@@ -1255,8 +1266,16 @@
       if (!rich && !md) return null;
       var mdWrap = d.getElementById("mdWrap");
       var isMd = !!(mdWrap && mdWrap.classList.contains("show"));
-      var text = isMd ? String((md && md.value) || "")
-                      : domToText(rich ? rich.innerHTML : "");
+      var text;
+      if (isMd) {
+        text = String((md && md.value) || "");
+      } else {
+        // 富文本模式也要给 Markdown 原文：domToText 会把标题、列表、``` 围栏全抹掉，
+        // 模型读到的是一片白文，改回来的东西自然就不是 Markdown 了。
+        var conv = window.parent.__convert;
+        text = (conv && conv.toMd) ? conv.toMd(rich ? rich.innerHTML : "")
+                                   : domToText(rich ? rich.innerHTML : "");
+      }
       if (!text.trim()) return null;
       var t = d.getElementById("title");
       return { title: ((t && t.value) || "").trim() || "（未命名草稿）", text: text };

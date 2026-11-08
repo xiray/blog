@@ -3154,14 +3154,23 @@
 
   var agentSnap = null;
 
+  /* 交给 AI 的正文一律是 Markdown 原文。
+     以前富文本模式发的是 innerText —— 标题层级、列表、**加粗**、还有 ```cpp
+     这种围栏全没了，模型只能看见一片白文，改完写回来自然就不是 Markdown 了
+     （代码块会变成普通段落，或者被它猜成别的语言）。 */
+  function currentMd() {
+    return mode === "md" ? el.md.value : htmlToMd(el.rich.innerHTML);
+  }
+
   function agentContext() {
+    var mdNow = currentMd();
     return {
       title: el.title.value, slug: el.slug.value, excerpt: el.excerpt.value,
       category: el.category.value === "__new__" ? "" : el.category.value,
       date: el.date.value, mode: mode,
-      text: mode === "rich" ? (el.rich.innerText || "") : el.md.value,
+      text: mdNow,
       html: mode === "rich" ? el.rich.innerHTML : "",
-      md: mode === "md" ? el.md.value : ""
+      md: mdNow
     };
   }
 
@@ -3219,6 +3228,23 @@
     paintAll();
   }
 
+  /* AI 给的本来就是 Markdown。Markdown 模式下直接写回输入框，
+     不要再走 md → html → md 这一圈：嵌套列表、表格、行内代码和 ``` 围栏
+     都会在往返里走形（列表被压平、代码块语言丢失）。 */
+  function appendMd(md) {
+    if (mode !== "md") { appendHtml(mdToHtml(md)); return; }
+    var cur = el.md.value.replace(/\s*$/, "");
+    var add = String(md || "").replace(/^\s*\n+/, "").replace(/\s*$/, "");
+    el.md.value = (cur ? cur + "\n\n" : "") + add + "\n";
+    renderMdPreview();
+  }
+
+  function replaceMd(md) {
+    if (mode !== "md") { replaceBody(mdToHtml(md)); return; }
+    el.md.value = String(md || "").replace(/\s*$/, "") + "\n";
+    renderMdPreview();
+  }
+
   function applyAgent(actions) {
     if (!Array.isArray(actions) || !actions.length) {
       return { ok: false, error: "没有可执行的动作" };
@@ -3248,9 +3274,9 @@
           }
           if (changed.length) done.push("改了" + changed.join("/"));
         } else if (op === "append_md") {
-          if (a.md) { appendHtml(mdToHtml(a.md)); done.push("追加一段（" + a.md.length + " 字符）"); }
+          if (a.md) { appendMd(a.md); done.push("追加一段（" + a.md.length + " 字符）"); }
         } else if (op === "replace_md") {
-          if (a.md) { replaceBody(mdToHtml(a.md)); done.push("整篇正文重写（" + a.md.length + " 字符）"); }
+          if (a.md) { replaceMd(a.md); done.push("整篇正文重写（" + a.md.length + " 字符）"); }
         } else if (op === "open_post") {
           if (a.slug) { openPost(String(a.slug)); done.push("打开《" + a.slug + "》"); }
         } else if (op === "new_post") {
