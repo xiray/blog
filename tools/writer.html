@@ -1849,7 +1849,10 @@
           insertHtml(aHtml);
         }
       }
-      if (f.compressed) {
+      if (asImage && !isImg) {
+        // 选了张图（HEIC / AVIF / TIFF），浏览器却显示不了：插也只能当附件
+        setStatus("已上传 " + f.display + "，但这个格式浏览器显示不了，正文里只能当附件——先转成 JPG 或 PNG 再传", "err");
+      } else if (f.compressed) {
         setStatus("已插入 " + f.display + " · 压缩 " + fmtSize(f.orig_bytes) +
           " → " + f.size + " · " + (f.note || ""), "ok");
       } else {
