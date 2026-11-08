@@ -3187,15 +3187,19 @@
     if (!s) return false;
     el.title.value = s.title; el.excerpt.value = s.excerpt;
     el.date.value = s.date; el.slug.value = s.slug;
+    /* 先切模式：setMode 自己会用当前内容覆盖另一半，所以切完之后再把
+       rich / md 都按快照写回去，否则撤销会被那次同步冲掉。 */
+    setMode(s.mode || "rich");
     el.rich.innerHTML = s.rich; el.md.value = s.md;
     slugTouched = s.slugTouched;
-    setMode(s.mode || "rich");
+    if (mode === "md") renderMdPreview();
+    else { ensureChips(); paintAll(); }
     if (el.category.value !== s.catRaw) {
       window.__pendingCat = s.catRaw;
       loadCategories();
       setTimeout(function () { el.category.value = s.catRaw; }, 300);
     }
-    ensureChips(); paintAll(); renderMdPreview(); saveDraft();
+    saveDraft();
     return true;
   }
 
@@ -3231,8 +3235,15 @@
   /* AI 给的本来就是 Markdown。Markdown 模式下直接写回输入框，
      不要再走 md → html → md 这一圈：嵌套列表、表格、行内代码和 ``` 围栏
      都会在往返里走形（列表被压平、代码块语言丢失）。 */
+  /* AI 给的正文本来就是 Markdown，就原样填进 Markdown 编辑区 ——
+     不再 md -> html 灌进富文本：那样结构会走形，发布出去的 source 也变成 HTML。
+     当前在富文本模式时先切到 Markdown（切换本身会把 rich 同步成 md），再往里写。 */
+  function intoMdEditor() {
+    if (mode !== "md") setMode("md");
+  }
+
   function appendMd(md) {
-    if (mode !== "md") { appendHtml(mdToHtml(md)); return; }
+    intoMdEditor();
     var cur = el.md.value.replace(/\s*$/, "");
     var add = String(md || "").replace(/^\s*\n+/, "").replace(/\s*$/, "");
     el.md.value = (cur ? cur + "\n\n" : "") + add + "\n";
@@ -3240,7 +3251,7 @@
   }
 
   function replaceMd(md) {
-    if (mode !== "md") { replaceBody(mdToHtml(md)); return; }
+    intoMdEditor();
     el.md.value = String(md || "").replace(/\s*$/, "") + "\n";
     renderMdPreview();
   }
