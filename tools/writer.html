@@ -1793,58 +1793,122 @@
     } catch (e) {}
   }
 
+  /* 只负责把文件传到 /api/upload，返回服务器给的 file 信息。
+     真正"往正文里插什么"由 uploadFile 决定 —— 粘贴图片时要先传完拿到
+     URL 才能替换，所以这层单独拆出来。 */
+  function uploadToServer(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file) { reject(new Error("没有拿到文件")); return; }
+      if (file.size > 25 * 1024 * 1024) { reject(new Error("文件超过 25MB")); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var b64 = String(reader.result).split(",")[1];
+        fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, data: b64 })
+        }).then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.ok) { reject(new Error(res.error || "服务器拒绝")); return; }
+            resolve(res.file);
+          })
+          .catch(function (err) { reject(new Error((err && err.message) || "网络出错")); });
+      };
+      reader.onerror = function () { reject(new Error("读取文件失败")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function uploadFile(file, asImage) {
-    if (!file) return;
-    if (file.size > 25 * 1024 * 1024) { setStatus("文件超过 25MB", "err"); return; }
+    if (!file) return Promise.resolve();
     setStatus("正在上传 " + file.name + " …");
+    return uploadToServer(file).then(function (f) {
+      var isImg = asImage || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name);
 
-    var reader = new FileReader();
-    reader.onload = function () {
-      var b64 = String(reader.result).split(",")[1];
-      fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, data: b64 })
-      }).then(function (r) { return r.json(); })
-        .then(function (res) {
-          if (!res.ok) { setStatus("上传失败：" + (res.error || ""), "err"); return; }
-          var f = res.file;
-          var isImg = asImage || /\.(png|jpe?g|gif|webp|svg)$/i.test(f.name);
+      if (isImg) {
+        if (mode === "md") {
+          // Markdown 里就是普通图片语法，右侧预览直接看到原图
+          insertAtCursor(el.md, "\n![" + f.display + "](" + f.url + ")\n");
+          renderMdPreview();
+        } else {
+          insertHtml('<p><span class="img-chip"><img src="' + f.url +
+            '" alt="' + esc(f.display) + '"><span class="ic-name">' +
+            esc(f.display) + "</span></span></p>");
+          ensureChips();   // 补回被 insertHTML 丢掉的文件名
+          var chips = el.rich.querySelectorAll(".img-chip:not(.collapsed)");
+          if (chips.length) collapseAfterHold(chips[chips.length - 1]);
+        }
+      } else {
+        var aHtml = '<p><a class="attach" href="' + f.url + '" download="' +
+          f.display + '">📎 ' + f.display +
+          '<span class="size">' + f.size + "</span></a></p>";
+        if (mode === "md") {
+          insertAtCursor(el.md, "\n" + aHtml + "\n");
+          renderMdPreview();
+        } else {
+          insertHtml(aHtml);
+        }
+      }
+      if (f.compressed) {
+        setStatus("已插入 " + f.display + " · 压缩 " + fmtSize(f.orig_bytes) +
+          " → " + f.size + " · " + (f.note || ""), "ok");
+      } else {
+        setStatus("已插入 " + f.display + "（" + f.size + "）", "ok");
+      }
+      return f;
+    }).catch(function (err) {
+      setStatus("上传失败：" + ((err && err.message) || "未知错误"), "err");
+      return null;
+    });
+  }
 
-          if (isImg) {
-            if (mode === "md") {
-              // Markdown 里就是普通图片语法，右侧预览直接看到原图
-              insertAtCursor(el.md, "\n![" + f.display + "](" + f.url + ")\n");
-              renderMdPreview();
-            } else {
-              insertHtml('<p><span class="img-chip"><img src="' + f.url +
-                '" alt="' + esc(f.display) + '"><span class="ic-name">' +
-                esc(f.display) + "</span></span></p>");
-              ensureChips();   // 补回被 insertHTML 丢掉的文件名
-              var chips = el.rich.querySelectorAll(".img-chip:not(.collapsed)");
-              if (chips.length) collapseAfterHold(chips[chips.length - 1]);
-            }
-          } else {
-            var aHtml = '<p><a class="attach" href="' + f.url + '" download="' +
-              f.display + '">📎 ' + f.display +
-              '<span class="size">' + f.size + "</span></a></p>";
-            if (mode === "md") {
-              insertAtCursor(el.md, "\n" + aHtml + "\n");
-              renderMdPreview();
-            } else {
-              insertHtml(aHtml);
-            }
-          }
-          if (f.compressed) {
-            setStatus("已插入 " + f.display + " · 压缩 " + fmtSize(f.orig_bytes) +
-              " → " + f.size + " · " + (f.note || ""), "ok");
-          } else {
-            setStatus("已插入 " + f.display + "（" + f.size + "）", "ok");
-          }
+  /* ---- 剪贴板里的图片 ------------------------------------------------
+     截图工具复制过来的图，剪贴板里通常是 image/png 文件（有时还在 HTML 里
+     塞一个 data: URI 的 img）。这两条都得走 /api/upload，否则：
+       · files 那条被浏览器默认插入成 blob: URL，编辑器里看得见，发布后全裂；
+       · data: 那条把几 MB 的 base64 直接写进正文，文章又大又难读。
+     下面两个函数就是给粘贴用的：一个挑出图片文件，一个把内联图换成上传后的地址。 */
+  function pickImages(cd) {
+    var out = [];
+    if (cd.files && cd.files.length) {
+      for (var i = 0; i < cd.files.length; i++) {
+        if (/^image\//.test(cd.files[i].type)) out.push(cd.files[i]);
+      }
+    }
+    if (!out.length && cd.items) {
+      for (var j = 0; j < cd.items.length; j++) {
+        var it = cd.items[j];
+        if (it.kind === "file" && /^image\//.test(it.type)) {
+          var f = it.getAsFile();
+          if (f) out.push(f);
+        }
+      }
+    }
+    return out;
+  }
+
+  var IMG_EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" };
+
+  // 把容器里 data:/blob: 的 <img> 上传后换成服务器地址，返回 Promise
+  function adoptInlineImages(box) {
+    var imgs = Array.prototype.slice.call(box.querySelectorAll("img"));
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(function (img) {
+      var src = img.getAttribute("src") || "";
+      if (!/^(data:|blob:)/i.test(src)) return null;
+      return fetch(src)
+        .then(function (r) { return r.blob(); })
+        .then(function (blob) {
+          var ext = IMG_EXT[blob.type] || ".png";
+          return uploadToServer(new File([blob], "pasted-" + Date.now() + ext,
+            { type: blob.type || "image/png" }));
         })
-        .catch(function () { setStatus("上传出错", "err"); });
-    };
-    reader.readAsDataURL(file);
+        .then(function (f) {
+          img.setAttribute("src", f.url);
+          if (!img.getAttribute("alt")) img.setAttribute("alt", f.display);
+        })
+        .catch(function () { /* 单张失败就先留着原样，别把整段粘贴搞丢 */ });
+    })).then(function () { return box; });
   }
 
   el.filePicker.addEventListener("change", function () {
@@ -1922,6 +1986,20 @@
   el.rich.addEventListener("paste", function (e) {
     var cd = e.clipboardData || window.clipboardData;
     if (!cd) return;
+
+    /* 剪贴板里直接带着图片（截图、右键复制图片）：先传到服务器再插，
+       顺序上传，这样多图也不会挤到同一个位置。 */
+    var pics = pickImages(cd);
+    if (pics.length) {
+      e.preventDefault();
+      saveSelection();
+      var queue = Promise.resolve();
+      pics.forEach(function (f) {
+        queue = queue.then(function () { return uploadFile(f, true); });
+      });
+      return;
+    }
+
     var html = cd.getData("text/html");
     var plain = cd.getData("text/plain") || "";
     var sel = window.getSelection();
@@ -1956,8 +2034,13 @@
     }
 
     stripDarkPaint(box);
-    document.execCommand("insertHTML", false, box.innerHTML);
-    ensureChips();
+    /* 从网页/截图工具复制来的图可能是 data: 或 blob:，直接插会把 base64 写进正文、
+       或者留下一个发布后必然失效的 blob 地址。先传上去换成 /files/ 的地址再插。 */
+    saveSelection();
+    adoptInlineImages(box).then(function () {
+      insertHtml(box.innerHTML);
+      ensureChips();
+    });
   });
 
   el.rich.addEventListener("keyup", updateToolbarState);
@@ -2214,6 +2297,20 @@
   el.md.addEventListener("input", function () {
     if (mdTimer) clearTimeout(mdTimer);
     mdTimer = setTimeout(function () { renderMdPreview(); saveDraft(); }, 180);
+  });
+
+  /* Markdown 模式下粘贴截图：textarea 天生放不下图，以前按 Ctrl+V 完全没反应。
+     现在走上传，插成的还是标准 ![](../files/xxx.png)，右边预览立刻能看到。 */
+  el.md.addEventListener("paste", function (e) {
+    var cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+    var pics = pickImages(cd);
+    if (!pics.length) return;
+    e.preventDefault();
+    var queue = Promise.resolve();
+    pics.forEach(function (f) {
+      queue = queue.then(function () { return uploadFile(f, true); });
+    });
   });
   el.rich.addEventListener("input", function () {
     if (mdTimer) clearTimeout(mdTimer);
