@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>让AI生成游戏，有什么问题 — xiray</title>
+<meta name="description" content="AI 几秒钟就能给你一个能跑的游戏 demo，但从 demo 到能上线的游戏，中间隔着状态管理、代码寿命、玩法意图、资源一致性和调试成本五道坎。">
+<meta name="category" content="Agent 编程">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css?v=20261105d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>让AI生成游戏，有什么问题</h1>
+      <p class="article-meta">2026 · 11 · 08
+        <span class="dot">·</span> <span class="cat-chip">Agent 编程</span>
+        <span class="dot">·</span> 约 6 分钟</p>
+    </header>
+
+    <div class="prose">
+<p>现在让 AI 写一个能跑的小游戏，也就几分钟的事：一个能左右移动的小人，能跳，能踩到平台，甚至还有分数。第一次看到的时候确实会愣一下。</p>
+<p>但如果你真把那个 demo 做成一个能玩两小时、能发出去的游戏，问题会一个接一个冒出来。不是 AI 不够聪明，而是<strong>游戏开发和写脚本是两件事</strong>。</p>
+<p>下面这些坑我基本都踩过，按塌方顺序排。</p>
+<h2>一、「能跑」和「能玩」之间隔着一条河</h2>
+<p>demo 的验收标准是「我按方向键，小人动了」。</p>
+<p>游戏的验收标准是「我按方向键，小人动了，而且手感对、镜头跟得上、音效不刺耳、掉帧的时候不穿模、暂停再恢复状态没乱」。</p>
+<p>前者只要代码不报错，后者需要几十个隐性的约定。AI 默认给你前者，因为它被训练成「回答一个问题」，而不是「交付一个产品」。</p>
+<p>所以第一件要摆正的事：<strong>AI 给你的不是游戏，是可运行的起点。</strong> 把它当草稿，别当成果。</p>
+<h2>二、状态是第一个塌方点</h2>
+<p>游戏本质上是一台不停跑的状态机。而 AI 写状态管理，最常见的产出是把所有东西塞进一堆全局变量：</p>
+<pre data-lang="js"><code class="language-js">let player, enemies = [], bullets = [], score = 0;
+let paused = false, lastTime = 0, spawnTimer = 0;</code></pre>
+<p>单文件 demo 这样写很爽。一旦要加「重开一局」，这套结构就开始要账：重开时要清掉的不是一两个变量，而是玩家位置、速度、残留的粒子、正在播的音效、所有计时器、暂停标志、上一局的分数。漏一个，就是「重开后小人从半空掉下来」，或者「分数从上一局接着加」。</p>
+<p>AI 通常只清它记得的那几个（位置、分数），因为它写完就没再从头读过这份代码。</p>
+<p>第二个问题是把时间和帧绑在一起：</p>
+<pre data-lang="js"><code class="language-js">function loop() {
+  player.y += player.vy;        // 每帧固定加一次
+  requestAnimationFrame(loop);
+}</code></pre>
+<p>在 144Hz 的屏幕上这个游戏快 2.4 倍，切到后台再回来可能直接穿过地板。正确写法是把两帧间隔算进去，并且夹住上限：</p>
+<pre data-lang="js"><code class="language-js">const dt = Math.min((now - last) / 1000, 0.05);
+player.y += player.vy * dt;</code></pre>
+<p>那个 0.05 才是关键：切标签页、系统卡一下之后，dt 可能是两秒，不 clamp 的话一帧就能把角色送出地图。</p>
+<h2>三、架构：能加功能，不能改结构</h2>
+<p>AI 很擅长「继续加」。你说加个二段跳，它在跳跃函数里再插一个 if；你说加个冲刺，它再加一个计时器。改到第五个机制的时候，输入处理里已经有七八个标志位互相制约，谁先谁后没人说得清。</p>
+<p>问题不在代码脏，而在于<strong>没有边界</strong>。逻辑、渲染、输入、音效全挤在一个文件里，加一个功能要改七处，改错一处整局崩。你说重构，它会给你一份「看起来等价」的新代码，然后你花一晚上对比新旧行为。</p>
+<p>可行的做法是先把边界划出来再让它写：</p>
+<ul><li>一层只算状态的模拟（没有 DOM、没有 canvas，输入是数据，输出是数据）</li><li>一层只负责把状态画出来</li><li>输入、音效、存档挂在外围</li></ul>
+<p>我自己那个游戏就是这么劈开的：单机版是一个 HTML 文件里塞完了所有东西，改到后面每一处都得靠全局搜索定位；联机版拆成 <code>sim.js</code>（规则）、<code>client.js</code>（渲染）、<code>server.js</code>（房间），同一份规则两端共用，加技能只动一处。</p>
+<p>拆开之后 AI 的表现也变了：它一次只能改一个文件，反而更少改坏东西。</p>
+<h2>四、玩法：正确的实现，错误的设计</h2>
+<p>这是最难讲、也最容易被忽略的一层。AI 能给你一个完全正确的平台跳跃：重力 9.8，跳跃初速度算得没错，碰撞检测没有 bug。然后你玩两分钟就困了。</p>
+<p>因为它不知道<strong>你想要什么体验</strong>。它不知道跳跃应该「脆」还是「飘」，不知道受击后要留多长的无敌帧，不知道第一个敌人应该在玩家学会跳跃之后才出现。这些不是代码问题，是设计意图，而设计意图只能由人给。</p>
+<p>更麻烦的是它会本能地「填满」：你让它做一个关卡，它会给你一排均匀分布的平台、三只一样的敌人、结尾一个旗子。结构完整，节奏为零。</p>
+<p>所以我现在让它写玩法时，会先写验收条件，比如：</p>
+<blockquote><p>前 20 秒不出现敌人；第一次受伤必须发生在玩家已经学会二段跳之后；一局 90 秒内难度提升两次。</p></blockquote>
+<p>这种话它能听懂，也能照着调数值。不给这些，它给你的就是「一个能通关的东西」，而不是「一个值得通关的东西」。</p>
+<h2>五、资源：占位图会一路占位到最后</h2>
+<p>AI 生成的代码里，资源路径一半是编的：</p>
+<pre data-lang="js"><code class="language-js">const bg = new Image(); bg.src = 'assets/bg.png';</code></pre>
+<p>那个文件不存在，浏览器不报错，控制台也不报错，只是背景永远黑的。你还以为是自己 z-index 写错了。</p>
+<p>音频更麻烦：它可能指向一个不存在的 mp3，也可能给你一段「用 WebAudio 合成音效」的代码，跑起来像电子表闹钟。美术风格也会漂——一会儿像素风，一会儿扁平图标，因为它在不同时间生成的不同片段里，对「这个游戏长什么样」根本没有一致印象。</p>
+<p>上线前值得单独过一遍：所有 <code>src</code> 指向的文件是不是真的存在、尺寸是否统一、有没有缺字体、打包体积里有没有几张 4MB 的 png。</p>
+<h2>六、调试：它修好了报错，但不知道你在做什么</h2>
+<p>最后是成本最高的一层。</p>
+<p>AI 改 bug 的方式是「针对报错改」，不是「针对系统改」。你说第三关开始掉帧，它给你加一个对象池；你说有时候跳不起来，它改一下输入判定。单看每一步都合理，合起来就是：每次修完别处又开始坏，而且没人记得昨天为什么那么写。</p>
+<p>它没有你的上下文。它不知道那个看起来多余的 <code>if</code> 是为了绕开某个浏览器的手感问题，不知道那行 clamp 是你在真机上测出来的。它重写的时候，会把这些「没有注释的历史」一起删掉。</p>
+<p>我现在会强制它做三件事：</p>
+<ol><li>改之前先说出它认为的因果关系，让我确认，而不是直接给代码；</li><li>留一个能看见状态的东西（帧率、实体数、当前状态机），出问题时不用猜；</li><li>每次只改一个变量，改完立刻试，不行就退回去。</li></ol>
+<h2>收尾</h2>
+<p>把 AI 当手很快、但没有记忆的实习生，而不是同事。</p>
+<p>它能替你写掉那 80% 的样板：输入、碰撞、相机、循环、存读档；它不能替你决定这个跳跃爽不爽、这一关该不该有敌人、这个手感要不要再硬一点。</p>
+<p>所以真正省时间的用法不是「让它做一个游戏」，而是「先把边界、状态结构和验收条件定死，让它填中间的实现」。前面那一步定得越清楚，后面要返工的地方就越少。</p>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+<script src="../assets/hl.js?v=20261105d"></script>
+<script src="../assets/toc.js?v=20261105d"></script>
+</body>
+</html>
