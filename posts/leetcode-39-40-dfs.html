@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetCode 39&amp;40：使用DFS匹配合适的元素 — xiray</title>
+<meta name="description" content="使用DFS(深度优先搜索)反复在答案末尾新建及删除数据，反复枚举">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css?v=20261105d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>LeetCode 39&amp;40：使用DFS匹配合适的元素</h1>
+      <p class="article-meta">2026 · 11 · 11
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 4 分钟</p>
+    </header>
+
+    <div class="prose">
+<h2>解题思路</h2>
+<blockquote><p>给你一个 无重复元素 的整数数组 candidates 和一个目标整数 target ，找出 candidates 中可以使数字和为目标数 target 的 所有 不同组合 ，并以列表形式返回。你可以按 任意顺序 返回这些组合。candidates 中的 同一个 数字可以 无限制重复被选取。如果至少一个数字的被选数量不同，则两种组合是不同的。</p></blockquote>
+<blockquote><p>给定一个候选人编号的集合 candidates 和一个目标数 target ，找出 candidates 中所有可以使数字和为 target 的组合。candidates 中的每个数字在每个组合中只能使用 一次 。</p></blockquote>
+<p>因为两题的描述都差不多，所以可以复用一个框架，再进行剪枝和去重。</p>
+<h2>DFS深度优先搜索</h2>
+<p>因为不限制每次选数的数量，所以不能用循环嵌套，要用dfs递归实现。具体的操作如下：</p>
+<pre data-lang="txt"><code class="language-txt">f(给定数组，目标值，开始位置，选择了的)       yes target = 0? return
+                                           no f(给定数组，目标值+选的，位置+1，选择了的+现在选的)</code></pre>
+<h2>最终代码</h2>
+<h3>39题</h3>
+<pre data-lang="cpp"><code class="language-cpp">class Solution {
+public:
+  vector&lt;vector&lt;int&gt;&gt; combinationSum(vector&lt;int&gt; &amp;candidates, int target) {
+    sort(candidates.begin(), candidates.end());
+    vector&lt;vector&lt;int&gt;&gt; ans;
+    vector&lt;int&gt; tmp;
+    dfs(candidates, target, 0, tmp, ans);
+    return ans;
+  }
+
+private:
+  void dfs(const vector&lt;int&gt; &amp;c, int target, int start,
+           vector&lt;int&gt; &amp;tmp, vector&lt;vector&lt;int&gt;&gt; &amp;ans) {
+    if (target == 0) {
+      ans.push_back(tmp);
+      return; }
+    for (int i = start; i &lt; c.size(); i++) {
+      if (c[i] &gt; target)
+        break;
+      tmp.push_back(c[i]);
+      dfs(c, target - c[i], i, tmp, ans);
+      tmp.pop_back();
+    }
+  }
+};</code></pre>
+<h3>40题</h3>
+<pre data-lang="cpp"><code class="language-cpp">class Solution {
+public:
+  vector&lt;vector&lt;int&gt;&gt; combinationSum2(vector&lt;int&gt; &amp;candidates, int target) {
+    sort(candidates.begin(), candidates.end());
+    vector&lt;vector&lt;int&gt;&gt; ans;
+    vector&lt;int&gt; tmp;
+    dfs(candidates, target, 0, tmp, ans);
+    return ans;
+  }
+
+private:
+  void dfs(const vector&lt;int&gt; &amp;c, int target, int start, vector&lt;int&gt; &amp;tmp, vector&lt;vector&lt;int&gt;&gt; &amp;ans) {
+    if (target == 0) {
+      ans.push_back(tmp);
+      return; 
+    }
+    for (int i = start; i &lt; c.size(); i++) {
+      if (c[i] &gt; target)
+        break;
+      if (i &gt; start &amp;&amp; c[i] == c[i-1]) continue;
+      tmp.push_back(c[i]);
+      dfs(c, target - c[i], i + 1, tmp, ans);
+      tmp.pop_back();
+    }
+  }
+};</code></pre>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+<script src="../assets/hl.js?v=20261105d"></script>
+<script src="../assets/toc.js?v=20261105d"></script>
+</body>
+</html>
