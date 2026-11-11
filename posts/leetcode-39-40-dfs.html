@@ -31,7 +31,7 @@
       <h1>LeetCode 39&amp;40：使用DFS匹配合适的元素</h1>
       <p class="article-meta">2026 · 11 · 11
         <span class="dot">·</span> <span class="cat-chip">代码编写</span>
-        <span class="dot">·</span> 约 4 分钟</p>
+        <span class="dot">·</span> 约 3 分钟</p>
     </header>
 
     <div class="prose">
@@ -47,17 +47,17 @@
 <h3>39题</h3>
 <pre data-lang="cpp"><code class="language-cpp">class Solution {
 public:
-  vector&lt;vector&lt;int&gt;&gt; combinationSum(vector&lt;int&gt; &amp;candidates, int target) {
+  vector&gt; combinationSum(vector &amp;candidates, int target) {
     sort(candidates.begin(), candidates.end());
-    vector&lt;vector&lt;int&gt;&gt; ans;
-    vector&lt;int&gt; tmp;
+    vector&gt; ans;
+    vector tmp;
     dfs(candidates, target, 0, tmp, ans);
     return ans;
   }
 
 private:
-  void dfs(const vector&lt;int&gt; &amp;c, int target, int start,
-           vector&lt;int&gt; &amp;tmp, vector&lt;vector&lt;int&gt;&gt; &amp;ans) {
+  void dfs(const vector &amp;c, int target, int start,
+           vector &amp;tmp, vector&gt; &amp;ans) {
     if (target == 0) {
       ans.push_back(tmp);
       return; }
@@ -73,19 +73,19 @@ private:
 <h3>40题</h3>
 <pre data-lang="cpp"><code class="language-cpp">class Solution {
 public:
-  vector&lt;vector&lt;int&gt;&gt; combinationSum2(vector&lt;int&gt; &amp;candidates, int target) {
+  vector&gt; combinationSum2(vector &amp;candidates, int target) {
     sort(candidates.begin(), candidates.end());
-    vector&lt;vector&lt;int&gt;&gt; ans;
-    vector&lt;int&gt; tmp;
+    vector&gt; ans;
+    vector tmp;
     dfs(candidates, target, 0, tmp, ans);
     return ans;
   }
 
 private:
-  void dfs(const vector&lt;int&gt; &amp;c, int target, int start, vector&lt;int&gt; &amp;tmp, vector&lt;vector&lt;int&gt;&gt; &amp;ans) {
+  void dfs(const vector &amp;c, int target, int start, vector &amp;tmp, vector&gt; &amp;ans) {
     if (target == 0) {
       ans.push_back(tmp);
-      return; 
+      return;
     }
     for (int i = start; i &lt; c.size(); i++) {
       if (c[i] &gt; target)
