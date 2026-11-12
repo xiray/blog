@@ -1399,6 +1399,10 @@
 
   function refFootText() {
     if (!attach) { el.refFoot.textContent = "选一篇，AI 会读全文再回答"; return; }
+    if (!String(attach.text || "").trim()) {
+      el.refFoot.textContent = "已引用 · 这篇还没有正文，只会把标题和摘要给 AI";
+      return;
+    }
     el.refFoot.textContent = "已引用 · " + attach.text.length.toLocaleString() + " 字符" +
       (attach.truncated ? "（原文更长，只带前面一部分）" : "");
   }
@@ -1408,7 +1412,8 @@
     if (attach) {
       el.refChip.hidden = false;
       el.refName.textContent = attach.title + (attach.auto ? "（自动）" : "");
-      el.refSize.textContent = attach.text.length.toLocaleString() + " 字符";
+      el.refSize.textContent = String(attach.text || "").trim()
+        ? attach.text.length.toLocaleString() + " 字符" : "还没有正文";
       el.refBtn.classList.add("on");
     } else {
       el.refChip.hidden = true;
@@ -1465,6 +1470,7 @@
       var where = draftCache.stale ? "浏览器里存的上次草稿" : "写作台里正在写的";
       items.push({
         draft: true, title: draftCache.title, blank: dblank,
+        excerpt: draftCache.excerpt || "",
         meta: where + (dblank
           ? " · 正文还是空的" + (draftCache.excerpt ? "｜" + draftCache.excerpt.slice(0, 24) : "")
           : " · " + draftCache.text.length + " 字符"),
@@ -1499,12 +1505,14 @@
     });
   }
 
-  function applyAttach(title, text, meta, slug) {
+  function applyAttach(title, text, meta, slug, excerpt) {
     var truncated = false;
     if (text.length > REF_MAX) { text = text.slice(0, REF_MAX); truncated = true; }
-    setAttach({ slug: slug || "", title: title, meta: meta || "", text: text, truncated: truncated });
+    setAttach({ slug: slug || "", title: title, meta: meta || "", text: text,
+                excerpt: excerpt || "", truncated: truncated });
     setStatus("已引用 " + (title.length > 14 ? title.slice(0, 14) + "…" : title) +
-      (truncated ? "（太长，已截断）" : ""), "ok");
+      (!text.trim() ? "（这篇还没有正文，只带标题和摘要）"
+       : truncated ? "（太长，已截断）" : ""), "ok");
     el.input.focus();
   }
 
@@ -1535,17 +1543,25 @@
   function pickRef(it) {
     closeRef();
     if (it.draft) {
-      if (!String(it.text || "").trim()) {
-        setStatus("《" + it.title + "》正文还是空的，写点内容再引用", "err");
-        return;
-      }
-      applyAttach(it.title, it.text, "写作台草稿", "");
+      var dt = String(it.text || "");
+      // 正文还空着也允许引用：标题 + 摘要本身就能让 AI 接着起稿
+      applyAttach(it.title, dt,
+        dt.trim() ? "写作台草稿" : "写作台草稿 · 只有标题和摘要",
+        "", it.excerpt || "");
       return;
     }
     attachBySlug(it.slug, it.title);
   }
 
   function refPrompt(a) {
+    var body = String(a.text || "");
+    if (!body.trim()) {
+      return "用户引用了自己博客里的一篇还没写正文的稿子。\n" +
+        "标题：" + a.title + "\n" +
+        (a.excerpt ? "摘要：" + a.excerpt + "\n" : "") +
+        "正文目前是空的。如果用户要你续写、扩写或起稿，就按标题和摘要的方向写；" +
+        "不要假装看到过正文里不存在的内容。";
+    }
     return "用户从自己的博客里引用了下面这篇文章，当作参考资料来读。" +
       "回答相关问题时以文中内容为准；引用原文用「」标出，不要编造文中没有的说法；" +
       "如果问题和这篇文章无关，就正常回答，不用硬往文章上靠。\n\n" +
@@ -1623,13 +1639,19 @@
         return (m.role === "user" || m.role === "assistant") && !m.error && m.content;
       })
       .map(function (m) { return { role: m.role, content: m.content }; });
-    var sysLine = ag ? agentPrompt(ag) : (attach ? refPrompt(attach) : "");
-    if (sysLine) {
+    // Agent 模式的系统提示讲的是「当前正在编辑的文章」。用户手动引用的可能是另一篇，
+    // 那条必须单独再给一条，否则点了引用等于没点——模型只看得到当前文章。
+    var sysLines = [];
+    if (ag) sysLines.push(agentPrompt(ag));
+    if (attach && (!ag || !attach.auto)) sysLines.push(refPrompt(attach));
+    if (sysLines.length) {
       var at = history.length;
       for (var hi = history.length - 1; hi >= 0; hi--) {
         if (history[hi].role === "user") { at = hi; break; }
       }
-      history.splice(at, 0, { role: "system", content: sysLine });
+      for (var si = 0; si < sysLines.length; si++) {
+        history.splice(at + si, 0, { role: "system", content: sysLines[si] });
+      }
     }
 
     fetch("/api/ai/chat", {
