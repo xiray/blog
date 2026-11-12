@@ -256,6 +256,8 @@
     color: var(--muted); margin-top: .1rem;
   }
   .ref-item.draft .t { color: var(--accent); }
+  .ref-item.blank .t { color: var(--muted); }
+  .ref-item.blank .m { color: var(--accent); opacity: .8; }
   .ref-pop .rp-foot {
     flex: 0 0 auto; padding: .35rem .55rem; border-top: 1px solid var(--line-soft);
     font-size: .6875rem; color: var(--muted); font-family: var(--mono);
@@ -1321,10 +1323,28 @@
   }
 
   // 连上了写作台（悬浮窗或「全屏」标签页）就直接要当前草稿
+  // 写作台连不上时的兜底：它每次改动都把草稿写在这个键里，同源就能读到
+  function draftFromStorage() {
+    try {
+      var raw = localStorage.getItem("xiray-writer-v2");
+      if (!raw) return null;
+      var d = JSON.parse(raw);
+      var title = String(d.title || "").trim();
+      var excerpt = String(d.excerpt || "").trim();
+      var text = d.mode === "md" ? String(d.md || "")
+                                 : domToText(String(d.rich || ""));
+      if (!title && !excerpt && !text.trim()) return null;
+      return {
+        title: title || "（未命名草稿）", excerpt: excerpt,
+        text: text, blank: !text.trim(), stale: true
+      };
+    } catch (e) { return null; }
+  }
+
   function writerDraft() {
     try {
       var d = linkDoc();
-      if (!d) return null;
+      if (!d) return draftFromStorage();
       var rich = d.getElementById("richEditor");
       var md = d.getElementById("mdEditor");
       if (!rich && !md) return null;
@@ -1340,10 +1360,21 @@
         text = (conv && conv.toMd) ? conv.toMd(rich ? rich.innerHTML : "")
                                    : domToText(rich ? rich.innerHTML : "");
       }
-      if (!text.trim()) return null;
       var t = d.getElementById("title");
-      return { title: ((t && t.value) || "").trim() || "（未命名草稿）", text: text };
-    } catch (e) { return null; }
+      var ex = d.getElementById("excerpt");
+      var title = ((t && t.value) || "").trim();
+      var excerpt = ((ex && ex.value) || "").trim();
+      text = String(text || "");
+      // 标题、摘要、正文都空才算真白纸；只填了标题摘要的新草稿也要列出来，
+      // 否则「引用文章」里根本找不到自己刚建的那一篇。
+      if (!title && !excerpt && !text.trim()) return null;
+      return {
+        title: title || "（未命名草稿）",
+        excerpt: excerpt,
+        text: text,
+        blank: !text.trim()
+      };
+    } catch (e) { return draftFromStorage(); }
   }
 
   /* 自动读取：在写作台小窗里不用手动点「引用文章」，
@@ -1354,7 +1385,8 @@
     if (!linked() || !autoRefOn) return;
     if (attach && !attach.auto) return;          // 手动选的文章不动它
     var d = writerDraft();
-    if (!d) {
+    // 连不上、正文空着、或只是浏览器里存的旧快照：不自动带，但列表里仍会列出来
+    if (!d || d.blank || d.stale) {
       if (attach && attach.auto) setAttach(null);
       return;
     }
@@ -1391,15 +1423,11 @@
   }
 
   function openRef() {
-    draftCache = linked() ? writerDraft() : null;
+    draftCache = writerDraft();      // 里面已经处理了「连不上就读本地存的草稿」
     el.refPop.hidden = false;
     el.refSearch.value = "";
     renderRefList();
-    // 列表缓存 30 秒就够了：刚发布的文章也能出现，又不用每次点都拉一遍
-    if (postsCache && Date.now() - postsAt < 30000) {
-      el.refSearch.focus();
-      return;
-    }
+    // 每次都重拉一遍：本地服务很快，而 30 秒的缓存会让「刚保存的那篇」看不见
     if (!postsCache) el.refList.innerHTML = '<div class="rp-empty">读取文章列表…</div>';
     loadPosts(true).then(function () {
       renderRefList();
@@ -1431,10 +1459,15 @@
     var hit = function (s) { return String(s || "").toLowerCase().indexOf(kw) >= 0; };
 
     var items = [];
-    if (draftCache && (!kw || hit(draftCache.title) || hit(draftCache.text.slice(0, 400)))) {
+    if (draftCache && (!kw || hit(draftCache.title) || hit(draftCache.excerpt) ||
+                       hit(draftCache.text.slice(0, 400)))) {
+      var dblank = !String(draftCache.text || "").trim();
+      var where = draftCache.stale ? "浏览器里存的上次草稿" : "写作台里正在写的";
       items.push({
-        draft: true, title: draftCache.title,
-        meta: "写作台里正在写的 · " + draftCache.text.length + " 字符",
+        draft: true, title: draftCache.title, blank: dblank,
+        meta: where + (dblank
+          ? " · 正文还是空的" + (draftCache.excerpt ? "｜" + draftCache.excerpt.slice(0, 24) : "")
+          : " · " + draftCache.text.length + " 字符"),
         text: draftCache.text
       });
     }
@@ -1458,7 +1491,7 @@
     items.forEach(function (it) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "ref-item" + (it.draft ? " draft" : "");
+      b.className = "ref-item" + (it.draft ? " draft" : "") + (it.blank ? " blank" : "");
       b.innerHTML = '<span class="t">' + esc(it.title) + "</span>" +
         '<span class="m">' + esc(it.meta || "") + "</span>";
       b.addEventListener("click", function () { pickRef(it); });
@@ -1501,7 +1534,14 @@
 
   function pickRef(it) {
     closeRef();
-    if (it.draft) { applyAttach(it.title, it.text, "写作台草稿", ""); return; }
+    if (it.draft) {
+      if (!String(it.text || "").trim()) {
+        setStatus("《" + it.title + "》正文还是空的，写点内容再引用", "err");
+        return;
+      }
+      applyAttach(it.title, it.text, "写作台草稿", "");
+      return;
+    }
     attachBySlug(it.slug, it.title);
   }
 
