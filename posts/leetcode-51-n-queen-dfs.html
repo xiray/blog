@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leetcode 51：N_Queen用DFS进行布局 — xiray</title>
+<meta name="description" content="用数组进行选择以及遍历对角线检查是否符合要求">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css?v=20261105d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>Leetcode 51：N_Queen用DFS进行布局</h1>
+      <p class="article-meta">2026 · 11 · 12
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 3 分钟</p>
+    </header>
+
+    <div class="prose">
+<h2>整体思路</h2>
+<blockquote><p>按照国际象棋的规则，皇后可以攻击与之处在同一行或同一列或同一斜线上的棋子。<br>n 皇后问题 研究的是如何将 n 个皇后放置在 n×n 的棋盘上，并且使皇后彼此之间不能相互攻击。<br>给你一个整数 n ，返回所有不同的 n 皇后问题 的解决方案。   </p></blockquote>
+<p>题目要求王后之间不能互相攻击，即在横方向，竖方向和斜方向上不能同时存在两个王后。<br>因为需要找出所有可能的情况，所以需要一步步尝试所有可能的情况，并且判定当前个字是否符合规则。<br>我使用深度优先搜索，每次选择一条路走到底，然后倒回上一个选择，重新选择。</p>
+<h2>使用数组筛选合适位置</h2>
+<p>因为皇后的数量和行、列数都一样，且王后可以吃掉同一直线上的棋子，所以每行/每列上有<strong>且仅有</strong>一个皇后。<br>因为我的dfs函数里面有参数line，每次按列枚举，所以只要保证每行没有重复的就行。我的方法是使用一个数组记录可以使用的位置，再用变量记录选择的行号，删除后调用完函数再加入。</p>
+<h2>遍历对角线排查非法放置</h2>
+<p>王后可以吃掉斜线上的棋子，所以每次根据行列选择后还要用两个循环分别遍历两条斜线，检查斜线上有没有棋子。</p>
+<h2>代码实现</h2>
+<pre data-lang="cpp"><code class="language-cpp">#include &lt;bits/stdc++.h&gt;
+using namespace std;
+
+class Solution {
+public:
+    int n_;
+    vector&lt;vector&lt;char&gt;&gt; res;
+    vector&lt;vector&lt;vector&lt;char&gt;&gt;&gt; ans;
+    vector&lt;int&gt; can;
+
+    void dfs(int line, int n) {
+        if(line == n) {
+            ans.push_back(res);
+            return;
+        }
+        for(int i = 0; i &lt; (int)can.size(); i++) {
+            int x = can[i];
+            bool valid = true;
+            
+            for(int r = 0; r &lt; line; r++) if (res[r][x] == 'Q') valid = false;
+            for(int r = line - 1, c = x - 1; r &gt;= 0 &amp;&amp; c &gt;= 0; r--, c--) if(res[r][c] == 'Q') valid = false;
+            for(int r = line - 1, c = x + 1; r &gt;= 0 &amp;&amp; c &lt; n; r--, c++) if(res[r][c] == 'Q') valid = false;
+
+            if(!valid) continue;
+
+            can.erase(can.begin() + i);
+            res[line][x] = 'Q';
+            dfs(line + 1, n);
+            res[line][x] = '.';
+            can.insert(can.begin() + i, x);
+        }
+    }
+
+    vector&lt;vector&lt;string&gt;&gt; solveNQueens(int n) {
+        n_ = n;
+        res.assign(n, vector&lt;char&gt;(n, '.'));
+        ans.clear();
+        can.clear();
+        for(int i = 0; i &lt; n; i++) can.push_back(i);
+
+        dfs(0, n);
+
+        vector&lt;vector&lt;string&gt;&gt; result;
+        for(vector&lt;vector&lt;char&gt;&gt;&amp; board : ans) {
+            vector&lt;string&gt; b;
+            for(vector&lt;char&gt;&amp; row : board) b.push_back(string(row.begin(), row.end()));
+            result.push_back(b);
+        }
+        return result;
+    }
+};</code></pre>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+<script src="../assets/hl.js?v=20261105d"></script>
+<script src="../assets/toc.js?v=20261105d"></script>
+</body>
+</html>
