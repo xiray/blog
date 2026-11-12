@@ -57,6 +57,12 @@
   .thread { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
 
   .msg { position: relative; }
+  /* 换文章时插的分隔提示 */
+  .note-line {
+    text-align: center; font-size: .6875rem; color: var(--muted);
+    letter-spacing: .04em; padding: .35rem 0;
+    border-top: 1px dashed var(--line);
+  }
   .msg .who {
     font-family: var(--mono); font-size: .625rem; letter-spacing: .14em;
     text-transform: uppercase; color: var(--muted); margin-bottom: .35rem;
@@ -561,6 +567,7 @@
 
   var cfg = { base_url: "", model: "", has_key: false, key_hint: "", config_path: "" };
   var messages = [];        // {role, content, reasoning?, ref?}
+  var historyCut = 0;       // 这个下标之前的对话不再发给模型（换文章时往后推）
   var busy = false;
   var abort = null;
   var savedModels = [];
@@ -715,6 +722,13 @@
   }
 
   function buildMessage(m) {
+    if (m.role === "note") {
+      // 换文章时插的分隔条：只给人看，不发给模型
+      var line = document.createElement("div");
+      line.className = "note-line";
+      line.textContent = m.content;
+      return line;
+    }
     var wrap = document.createElement("div");
     wrap.className = "msg " + (m.role === "user" ? "user" : "ai");
 
@@ -809,12 +823,28 @@
     } catch (e) { return null; }
   }
 
+  /* 写作台换了文章（新建 / 打开另一篇）：上面那些对话属于另一篇，
+     不再发给模型，否则它会继续盯着上一篇写废的稿子改。 */
+  function onArticleSwitch(why, c) {
+    var real = false;
+    for (var i = historyCut; i < messages.length; i++) {
+      var r = messages[i].role;
+      if (r === "user" || r === "assistant") { real = true; break; }
+    }
+    if (!real) return;
+    var t = String((c && c.title) || "").trim() || (why === "new" ? "新建的文章" : "另一篇");
+    messages.push({ role: "note", content: "已换成《" + t + "》，上面的对话不再带给 AI" });
+    historyCut = messages.length;
+    renderAll();
+  }
+
   function agentPrompt(c) {
     var text = String((c && c.text) || "").trim();
     var tooLong = text.length > REF_MAX;
     var cut = tooLong ? text.slice(0, REF_MAX) : text;
     return "你是写作台里的文章编辑助手，可以直接改用户正在写的这篇文章。\n" +
       "正文是 Markdown 原文（标题 #、列表 -、粗体 **、代码块 ```语言 围栏），不是 HTML。\n" +
+      "下面这一节才是当前文章，是唯一有效的内容；上面几轮对话里出现过的正文都视为旧稿，不要再照它改。\n" +
       "当前文章：\n标题：" + ((c && c.title) || "（未命名）") + "\n" +
       "短名（slug）：" + ((c && c.slug) || "（还没定）") + "\n" +
       "类别：" + ((c && c.category) || "未分类") + "\n" +
@@ -1510,15 +1540,23 @@
     }
 
     abort = new AbortController();
-    var history = [];
-    // 引用的文章放在最前面，每轮都带一次：中途换文章，旧对话也立刻按新文章来。
+    // 当前文章放在最后一条提问之前：前面几轮里出现过的旧正文压不过它。
     // Agent 模式下换成「文章 + 可执行动作」的说明，让它能直接动文章。
     syncAutoRef();
     var ag = (agentOn && agentReady()) ? agentCtx() : null;
-    if (ag) history.push({ role: "system", content: agentPrompt(ag) });
-    else if (attach) history.push({ role: "system", content: refPrompt(attach) });
-    messages.filter(function (m) { return !m.error && (m.content || ""); })
-      .forEach(function (m) { history.push({ role: m.role, content: m.content }); });
+    var history = messages.slice(historyCut)
+      .filter(function (m) {
+        return (m.role === "user" || m.role === "assistant") && !m.error && m.content;
+      })
+      .map(function (m) { return { role: m.role, content: m.content }; });
+    var sysLine = ag ? agentPrompt(ag) : (attach ? refPrompt(attach) : "");
+    if (sysLine) {
+      var at = history.length;
+      for (var hi = history.length - 1; hi >= 0; hi--) {
+        if (history[hi].role === "user") { at = hi; break; }
+      }
+      history.splice(at, 0, { role: "system", content: sysLine });
+    }
 
     fetch("/api/ai/chat", {
       method: "POST",
@@ -1727,6 +1765,7 @@
     if (busy) return;
     if (messages.length && !confirm("清空当前对话？")) return;
     messages = [];
+    historyCut = 0;
     el.thread.innerHTML = "";
     el.empty.hidden = false;
     store(LS_MSG, []);
@@ -1767,11 +1806,21 @@
     messages = saved.map(function (m) {
       return { role: m.role, content: m.content, ref: m.ref, done: true };
     });
+    // 刷新后接着上次的「换文章」分隔点算，别把更早那篇的正文又发过去
+    for (var si = messages.length - 1; si >= 0; si--) {
+      if (messages[si].role === "note") { historyCut = si + 1; break; }
+    }
   }
   renderAll();
   autoGrow();
   if (agentOn) setAgentMode(true);      // 恢复上次的模式（也在里面同步自动引用）
   else syncAutoRef();
+  if (isEmbed) {
+    try {
+      var papi = window.parent.__XI_AGENT;
+      if (papi && papi.watchArticle) papi.watchArticle(onArticleSwitch);
+    } catch (e) {}
+  }
   loadConfig().then(function (res) {
     if (res && res.ok) {
       var c = res.config;
