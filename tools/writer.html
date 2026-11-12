@@ -2957,7 +2957,10 @@
 
   el.aiDockClose.addEventListener("click", closeDock);
   el.aiDockFull.addEventListener("click", function () {
-    window.open("/ai", "_blank", "noopener");
+    // 不带 noopener：新的标签页要能通过 opener 拿到这里的编辑器，
+    // 否则「全屏」里的 AI 看不到当前文章，也改不回去。
+    var w = window.open("/ai?embed=1", "xiray-ai-full");
+    if (!w) setStatus("被浏览器拦下弹窗了，允许弹出窗口后再点「全屏」", "err");
   });
 
   el.pubBtn.addEventListener("click", publish);

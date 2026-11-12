@@ -57,6 +57,12 @@
   .thread { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
 
   .msg { position: relative; }
+  /* 从写作台打开、却没连上时给一条明白的提示，别让人以为是模型笨 */
+  .link-warn {
+    margin-bottom: .45rem; padding: .4rem .55rem; border-radius: 6px;
+    font-size: .6875rem; line-height: 1.5; color: #ffcf9a;
+    background: rgba(255,184,107,.08); border: 1px solid rgba(255,184,107,.32);
+  }
   /* 换文章时插的分隔提示 */
   .note-line {
     text-align: center; font-size: .6875rem; color: var(--muted);
@@ -511,6 +517,35 @@
   if (isMini) document.body.classList.add("mini");
   if (isEmbed) document.body.classList.add("embed");
 
+  /* 和写作台的连接：嵌在悬浮窗里时 parent 就是写作台；
+     「全屏」打开的是独立标签页，只有 opener 是写作台。两条路都要能连上，
+     否则 AI 根本看不到你正在写的那篇。 */
+  function linkWin() {
+    try {
+      if (window.parent && window.parent !== window && window.parent.__XI_AGENT) return window.parent;
+    } catch (e) {}
+    var w = null;
+    try { w = window.opener; } catch (e) {}
+    // 小窗可能是从小窗里再开的，顺着 opener 往上找两三层
+    for (var i = 0; i < 3 && w; i++) {
+      try {
+        if (w.closed) return null;
+        if (w.__XI_AGENT) return w;
+        w = w.opener;
+      } catch (e) { return null; }
+    }
+    return null;
+  }
+  function linkApi() {
+    var w = linkWin();
+    return w ? w.__XI_AGENT : null;
+  }
+  function linkDoc() {
+    var w = linkWin();
+    try { return w ? w.document : null; } catch (e) { return null; }
+  }
+  function linked() { return !!linkApi(); }
+
   function openMiniWindow() {
     var w = 440;
     var h = Math.max(520, Math.min(780, (screen.availHeight || 900) - 120));
@@ -546,8 +581,7 @@
   try { agentOn = localStorage.getItem(LS_AGENT) === "1"; } catch (e) {}
 
   function agentReady() {
-    return !!(window.parent && window.parent !== window &&
-              window.parent.__XI_AGENT);
+    return linked();
   }
 
   function setAgentMode(on) {
@@ -818,7 +852,7 @@
 
   function agentCtx() {
     try {
-      var a = window.parent && window.parent.__XI_AGENT;
+      var a = linkApi();
       return a ? a.context() : null;
     } catch (e) { return null; }
   }
@@ -1098,8 +1132,8 @@
     skip.textContent = "忽略";
 
     go.addEventListener("click", function () {
-      var api = window.parent && window.parent.__XI_AGENT;
-      if (!api) { setStatus("只有写作台里的小窗能应用改动", "err"); return; }
+      var api = linkApi();
+      if (!api) { setStatus("没连上写作台，动不了文章", "err"); return; }
       var res = api.apply(acts);
       if (!res || !res.ok) {
         setStatus("应用失败：" + ((res && res.error) || "未知原因"), "err");
@@ -1114,7 +1148,7 @@
       syncAutoRef();
     });
     undo.addEventListener("click", function () {
-      var api = window.parent && window.parent.__XI_AGENT;
+      var api = linkApi();
       if (api && api.undo()) { undo.hidden = true; go.disabled = false; go.textContent = "再应用一次"; }
       syncAutoRef();
     });
@@ -1286,11 +1320,11 @@
       .trim();
   }
 
-  // 被嵌在写作台里时，父窗口就是同一个服务上的写作页，可以直接要当前草稿
+  // 连上了写作台（悬浮窗或「全屏」标签页）就直接要当前草稿
   function writerDraft() {
     try {
-      if (window.parent === window) return null;
-      var d = window.parent.document;
+      var d = linkDoc();
+      if (!d) return null;
       var rich = d.getElementById("richEditor");
       var md = d.getElementById("mdEditor");
       if (!rich && !md) return null;
@@ -1302,7 +1336,7 @@
       } else {
         // 富文本模式也要给 Markdown 原文：domToText 会把标题、列表、``` 围栏全抹掉，
         // 模型读到的是一片白文，改回来的东西自然就不是 Markdown 了。
-        var conv = window.parent.__convert;
+        var conv = linkWin().__convert;
         text = (conv && conv.toMd) ? conv.toMd(rich ? rich.innerHTML : "")
                                    : domToText(rich ? rich.innerHTML : "");
       }
@@ -1317,7 +1351,7 @@
   var autoRefOn = true;
 
   function syncAutoRef() {
-    if (!isEmbed || !autoRefOn) return;
+    if (!linked() || !autoRefOn) return;
     if (attach && !attach.auto) return;          // 手动选的文章不动它
     var d = writerDraft();
     if (!d) {
@@ -1357,7 +1391,7 @@
   }
 
   function openRef() {
-    draftCache = isEmbed ? writerDraft() : null;
+    draftCache = linked() ? writerDraft() : null;
     el.refPop.hidden = false;
     el.refSearch.value = "";
     renderRefList();
@@ -1815,11 +1849,15 @@
   autoGrow();
   if (agentOn) setAgentMode(true);      // 恢复上次的模式（也在里面同步自动引用）
   else syncAutoRef();
-  if (isEmbed) {
-    try {
-      var papi = window.parent.__XI_AGENT;
-      if (papi && papi.watchArticle) papi.watchArticle(onArticleSwitch);
-    } catch (e) {}
+  try {
+    var papi = linkApi();
+    if (papi && papi.watchArticle) papi.watchArticle(onArticleSwitch);
+  } catch (e) {}
+  if (isEmbed && !linked()) {
+    var warn = document.createElement("div");
+    warn.className = "link-warn";
+    warn.textContent = "没连上写作台：AI 看不到你正在写的那篇（标题和正文都读不到）";
+    el.input.parentNode.insertBefore(warn, el.input);
   }
   loadConfig().then(function (res) {
     if (res && res.ok) {
