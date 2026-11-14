@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leetcode60：排列序列我的思路与总结 — xiray</title>
+<meta name="description" content="逆用康托思想直接求出第k个全排列">
+<meta name="category" content="代码编写">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../assets/style.css?v=20261105d">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='%23ffb86b'/></svg>">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html">xiray</a>
+    <nav class="nav">
+      <a href="../index.html">文章</a>
+      <a href="../about.html">关于</a>
+      <a href="https://github.com/xiray" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <article class="article">
+
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← 返回文章列表</a>
+      <h1>Leetcode60：排列序列我的思路与总结</h1>
+      <p class="article-meta">2026 · 11 · 14
+        <span class="dot">·</span> <span class="cat-chip">代码编写</span>
+        <span class="dot">·</span> 约 4 分钟</p>
+    </header>
+
+    <div class="prose">
+<h2>整体思路</h2>
+<blockquote><p>给出集合 [1,2,3,...,n]，其所有元素共有 n! 种排列。给定 n 和 k，返回第 k 个排列。</p></blockquote>
+<p>这题需要对全排列进行排序，但是不用枚举求出每个数列，会TLE，可以用<a href="https://baike.baidu.com/item/%E5%BA%B7%E6%89%98%E5%B1%95%E5%BC%80/7968428?fromModule=search-result_lemma" target="_blank" rel="noopener">康托展开</a>的逆运算（由序号反推排列）直接求出第 k 个排列。</p>
+<p><strong>一句话说清康托分块</strong>：把所有排列按「第一位是谁」分成 n 组，每组大小是 <code>(n-1)!</code>。想知道第 k 个排列首位选几，只要算 <code>k / (n-1)!</code> 就知道落在第几组；算 <code>k % (n-1)!</code> 就得到组内偏移，再拿这个偏移去定第二位……如此逐位缩小，就能把答案「除」出来，不必真的枚举。</p>
+<p>比如 <code>n=3, k=3</code>（1-based，转 0-based 得 <code>k=2</code>）：</p>
+<ul><li>首位：<code>block = 2! = 2</code>，<code>idx = 2/2 = 1</code> → 候选池 <code>[1,2,3]</code> 里第 1 个（0-based）是 <code>2</code>，剩 <code>k = 0</code>；</li><li>第二位：<code>block = 1! = 1</code>，<code>idx = 0</code> → 池 <code>[1,3]</code> 取 <code>1</code>；</li><li>第三位：只剩 <code>3</code>。</li><li>结果 <code>213</code>，正是 <code>123, 132, 213</code> 中的第三个。</li></ul>
+<h2>解题方法</h2>
+<p>函数每次计算当前数位应填的数字，选择后从候选池中删除。</p>
+<pre data-lang="cpp"><code class="language-cpp">#include &lt;bits/stdc++.h&gt;
+using namespace std;
+
+class Solution {
+public:
+    //定义阶乘函数
+    long long fac(int n) {
+      long long res = 1;
+      for (int i = 1; i &lt;= n; i++) res *= i;
+      return res;
+    }
+
+    string ans;
+    vector&lt;int&gt; nums;
+
+    void sol(int pos, int n, int k) {
+      //如果选够了就返回
+      if (pos == n)
+        return;
+
+      //计算后面块的可能情况数量
+      int remain = n - pos;
+      long long block = fac(remain - 1);
+      int idx = k / block;
+      k %= block;
+      
+      ans += to_string(nums[idx]);
+      nums.erase(nums.begin() + idx);
+      sol(pos + 1, n, k);
+    }
+
+    //主函数
+    string getPermutation(int n, int k) {
+        ans.clear();
+        nums.clear();
+        for (int i = 1; i &lt;= n; i++) nums.push_back(i);
+        sol(0, n, k - 1);
+        return ans;
+    }
+};</code></pre>
+<h3>变量速查</h3>
+<p>一句话理解：<code>nums</code> 决定<strong>选谁</strong>，<code>block</code> 决定<strong>每块多大</strong>，<code>idx = k / block</code> 决定<strong>选第几个</strong>，<code>k %= block</code> 得到<strong>块内偏移</strong>，<code>ans</code> 攒出答案。</p>
+<table><thead><tr><th>变量</th><th>类型</th><th>作用</th><th>关键点</th></tr></thead><tbody><tr><td><code>ans</code></td><td><code>string</code></td><td>最终排列结果</td><td>逐位 <code>+=</code> 数字字符；每次调用前 <code>clear()</code></td></tr><tr><td><code>nums</code></td><td><code>vector&lt;int&gt;</code></td><td>候选数字池（未使用）</td><td>初始 <code>[1..n]</code>，<strong>始终保持升序</strong>；选一个删一个</td></tr><tr><td><code>pos</code> / <code>remain</code></td><td><code>int</code></td><td>当前填第几位（0-based）/ 还剩几位</td><td><code>remain = n - pos</code>，等于 <code>nums.size()</code>；<code>pos == n</code> 终止</td></tr><tr><td><code>block</code></td><td><code>long long</code></td><td>每块大小 = <code>(remain-1)!</code></td><td>固定当前位后，后面能产生的排列数</td></tr><tr><td><code>idx</code></td><td><code>int</code></td><td>当前位选池中第几个（0-based）</td><td><code>idx = k / block</code>，范围 <code>[0, remain)</code></td></tr><tr><td><code>k</code></td><td><code>int</code></td><td>0-based 偏移量</td><td>最外层传 <code>k-1</code>；递归中更新为 <code>k % block</code></td></tr></tbody></table>
+    </div>
+  </article>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>© 2026 xiray</span>
+    <span><a href="../index.html">回到首页</a></span>
+  </div>
+</footer>
+
+<script src="../assets/hl.js?v=20261105d"></script>
+<script src="../assets/toc.js?v=20261105d"></script>
+</body>
+</html>
