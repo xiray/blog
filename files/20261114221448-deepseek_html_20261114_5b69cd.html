@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeetCode 61 · 旋转链表 · 手动分步·清晰箭头</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+        body {
+            background: linear-gradient(145deg, #f5f7fe 0%, #e9eef7 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            max-width: 1100px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(12px);
+            border-radius: 48px;
+            padding: 30px 35px 40px;
+            box-shadow: 0 25px 40px -12px rgba(0, 20, 50, 0.35), 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid rgba(255,255,255,0.7);
+        }
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 6px;
+            color: #0b1b3a;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        h1 span {
+            background: #1f2b4e;
+            color: white;
+            font-size: 1rem;
+            padding: 4px 14px;
+            border-radius: 100px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .subhead {
+            color: #3a4a6b;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            border-bottom: 1px dashed #b7c4dc;
+            padding-bottom: 16px;
+        }
+        .subhead .key-idea {
+            background: #e0e8fa;
+            padding: 6px 18px;
+            border-radius: 60px;
+            font-weight: 500;
+            color: #1d2f58;
+        }
+        .canvas-container {
+            background: #ffffff;
+            border-radius: 40px;
+            padding: 25px 20px 20px;
+            box-shadow: inset 0 0 0 1px #ffffff, 0 10px 25px -8px #1f2b4e20;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: transparent;
+            border-radius: 28px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .step-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #eef2fb;
+            padding: 6px 18px 6px 24px;
+            border-radius: 60px;
+            font-weight: 500;
+            color: #17233e;
+            font-size: 1.05rem;
+            min-width: 230px;
+        }
+        .step-indicator .badge {
+            background: #1f2b4e;
+            color: white;
+            border-radius: 30px;
+            padding: 4px 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+        }
+        button {
+            background: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1f2b4e;
+            box-shadow: 0 4px 12px #1f2b4e1a, 0 0 0 1px #ffffff80 inset;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        button:hover:not(:disabled) {
+            background: #ffffff;
+            box-shadow: 0 10px 18px #1f2b4e2e, 0 0 0 1px #ffffff;
+            transform: translateY(-1px);
+        }
+        button:active:not(:disabled) {
+            transform: translateY(1px);
+            box-shadow: 0 4px 8px #1f2b4e1a;
+        }
+        button.primary {
+            background: #1f2b4e;
+            color: white;
+            box-shadow: 0 10px 16px -6px #0b1b3a60, 0 0 0 1px #33436b inset;
+        }
+        button.primary:hover:not(:disabled) {
+            background: #26355c;
+        }
+        button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 4px 12px #1f2b4e1a;
+        }
+        .legend {
+            display: flex;
+            gap: 20px;
+            color: #2f3f60;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 20px;
+            background: #a0b3d9;
+        }
+        .dot.head { background: #1f2b4e; }
+        .dot.tail { background: #b45353; }
+        .dot.ring { background: #5c7cba; }
+        .footer-note {
+            text-align: center;
+            margin-top: 16px;
+            color: #62759b;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>61. 旋转链表 <span>手动分步 · 平滑动画</span></h1>
+        <div class="subhead">
+            <div class="key-idea">🌀 点击"下一步"推进，环上带方向箭头</div>
+        </div>
+        <div class="canvas-container">
+            <canvas id="listCanvas" width="1000" height="420"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="step-indicator">
+                <span>步骤</span>
+                <span class="badge" id="stepLabel">0 / 4</span>
+                <span id="stepDesc">原链表</span>
+            </div>
+            <div class="button-group">
+                <button id="prevBtn" disabled>← 上一步</button>
+                <button id="nextBtn" class="primary">下一步 →</button>
+                <button id="resetBtn">↺ 重置</button>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item"><span class="dot head"></span> 当前头节点</div>
+            <div class="legend-item"><span class="dot tail"></span> 尾节点</div>
+            <div class="legend-item"><span class="dot ring"></span> 环形连接 / 断裂点</div>
+        </div>
+        <div class="footer-note">
+            ⏺ k = 2，将末尾2个节点(4,5)移动到开头
+        </div>
+    </div>
+    <script>
+        (function() {
+            const canvas = document.getElementById('listCanvas');
+            const ctx = canvas.getContext('2d');
+            const stepLabel = document.getElementById('stepLabel');
+            const stepDesc = document.getElementById('stepDesc');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const resetBtn = document.getElementById('resetBtn');
+
+            const nodes = [1, 2, 3, 4, 5];
+            const k = 2;
+            const n = nodes.length;
+            const shift = k % n;
+            const newHeadIdx = (n - shift) % n;
+
+            let currentStep = 0;
+            const totalSteps = 4;
+            const STEP_DURATION = { 1: 1200, 2: 1600, 3: 700, 4: 1400 };
+
+            let animProgress = 0;
+            let animStartTime = null;
+            let animRaf = null;
+            let animating = false;
+
+            const LINE_Y = 210;
+            const START_X = 180;
+            const SPACING = 140;
+            const NODE_R = 38;
+
+            const RING_CX = 500;
+            const RING_CY = 230;
+            const RING_R = 140;
+            const RING_NODE_R = 32;
+
+            function getBaseAngles() {
+                const arr = [];
+                for (let i = 0; i < n; i++) arr.push(-Math.PI/2 + i * (2 * Math.PI / n));
+                return arr;
+            }
+            const baseAngles = getBaseAngles();
+            const targetTopAngle = -Math.PI/2;
+            const rotOffset = targetTopAngle - baseAngles[newHeadIdx];
+
+            function easeInOutCubic(t) {
+                return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+            }
+
+            // ---------- 计算状态 ----------
+            function computeStates(step, progress) {
+                const eased = easeInOutCubic(progress);
+
+                const linePos = [];
+                for (let i = 0; i < n; i++) linePos.push({ x: START_X + i * SPACING, y: LINE_Y });
+
+                const ringPosBase = [];
+                for (let i = 0; i < n; i++) {
+                    const ang = baseAngles[i];
+                    ringPosBase.push({ x: RING_CX + RING_R * Math.cos(ang), y: RING_CY + RING_R * Math.sin(ang), angle: ang });
+                }
+                const ringPosRot = [];
+                for (let i = 0; i < n; i++) {
+                    const ang = baseAngles[i] + rotOffset;
+                    ringPosRot.push({ x: RING_CX + RING_R * Math.cos(ang), y: RING_CY + RING_R * Math.sin(ang), angle: ang });
+                }
+
+                const newLinePos = [];
+                for (let i = 0; i < n; i++) newLinePos.push({ x: START_X + i * SPACING, y: LINE_Y });
+
+                let positions = [], radii = [], ringAlpha = 0, lineArrowAlpha = 1;
+                let broken = false, breakAfterIdx = -1;
+                let showScissors = false, scissorsPos = null;
+                let showNewHeadHighlight = false, showRotateHint = false;
+
+                if (step === 0) {
+                    positions = linePos.map(p => ({ x: p.x, y: p.y }));
+                    radii = new Array(n).fill(NODE_R);
+                    ringAlpha = 0;
+                    lineArrowAlpha = 1;
+                } else if (step === 1) {
+                    positions = []; radii = [];
+                    for (let i = 0; i < n; i++) {
+                        const from = linePos[i], to = ringPosBase[i];
+                        positions.push({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased });
+                        radii.push(NODE_R + (RING_NODE_R - NODE_R) * eased);
+                    }
+                    ringAlpha = eased;
+                    lineArrowAlpha = 1 - eased;
+                } else if (step === 2) {
+                    positions = []; radii = [];
+                    for (let i = 0; i < n; i++) {
+                        const from = ringPosBase[i], to = ringPosRot[i];
+                        positions.push({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased });
+                        radii.push(RING_NODE_R);
+                    }
+                    ringAlpha = 1;
+                    lineArrowAlpha = 0;
+                    showNewHeadHighlight = true;
+                    showRotateHint = true;
+                } else if (step === 3) {
+                    positions = ringPosRot.map(p => ({ x: p.x, y: p.y }));
+                    radii = new Array(n).fill(RING_NODE_R);
+                    ringAlpha = 1;
+                    lineArrowAlpha = 0;
+                    broken = true;
+                    breakAfterIdx = (newHeadIdx - 1 + n) % n;
+                    showScissors = true;
+                    showNewHeadHighlight = true;
+                    const fromNode = ringPosRot[breakAfterIdx];
+                    const toNode = ringPosRot[(breakAfterIdx + 1) % n];
+                    let startAng = fromNode.angle;
+                    let endAng = toNode.angle;
+                    let delta = ((endAng - startAng) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI);
+                    const midAng = startAng + delta * 0.5;
+                    scissorsPos = {
+                        x: RING_CX + (RING_R + 25) * Math.cos(midAng),
+                        y: RING_CY + (RING_R + 25) * Math.sin(midAng)
+                    };
+                } else if (step === 4) {
+                    positions = []; radii = [];
+                    for (let i = 0; i < n; i++) {
+                        const from = ringPosRot[i];
+                        const newIdx = (i - newHeadIdx + n) % n;
+                        const to = newLinePos[newIdx];
+                        positions.push({ x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased });
+                        radii.push(RING_NODE_R + (NODE_R - RING_NODE_R) * eased);
+                    }
+                    ringAlpha = 1 - eased;
+                    lineArrowAlpha = eased;
+                    broken = true;
+                    breakAfterIdx = (newHeadIdx - 1 + n) % n;
+                }
+
+                const states = [];
+                for (let i = 0; i < n; i++) {
+                    const pos = positions[i], r = radii[i];
+                    let isHead = false, isTail = false, highlight = false;
+
+                    if (step === 0 || step === 1) {
+                        isHead = (i === 0);
+                        isTail = (i === n - 1);
+                    } else if (step === 2 || step === 3) {
+                        isHead = (i === 0);
+                        isTail = (i === n - 1);
+                        highlight = (i === newHeadIdx) && showNewHeadHighlight;
+                    } else if (step === 4) {
+                        if (progress < 0.5) {
+                            isHead = (i === 0);
+                            isTail = (i === n - 1);
+                        } else {
+                            const newIdx = (i - newHeadIdx + n) % n;
+                            isHead = (newIdx === 0);
+                            isTail = (newIdx === n - 1);
+                        }
+                    }
+                    states.push({ x: pos.x, y: pos.y, r, value: nodes[i], isHead, isTail, highlight });
+                }
+
+                return { states, ringAlpha, lineArrowAlpha, broken, breakAfterIdx, showScissors, scissorsPos, showRotateHint, step, progress };
+            }
+
+            // ---------- 绘制工具 ----------
+            function drawArrow(ctx, fromX, fromY, toX, toY, color = '#a0b3d9', width = 3, headSize = 11) {
+                const angle = Math.atan2(toY - fromY, toX - fromX);
+                ctx.beginPath();
+                ctx.moveTo(fromX, fromY);
+                ctx.lineTo(toX, toY);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(toX, toY);
+                ctx.lineTo(toX - headSize * Math.cos(angle - 0.4), toY - headSize * Math.sin(angle - 0.4));
+                ctx.lineTo(toX - headSize * Math.cos(angle + 0.4), toY - headSize * Math.sin(angle + 0.4));
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+
+            // 节点：文字不带阴影，保证清晰
+            function drawNode(ctx, x, y, r, value, opts = {}) {
+                const { isHead = false, isTail = false, highlight = false } = opts;
+
+                // 先画圆形（带阴影）
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, 2 * Math.PI);
+                const fillColor = highlight ? '#ffe8b0' : (isHead ? '#1f2b4e' : (isTail ? '#f7e5e5' : '#ffffff'));
+                ctx.fillStyle = fillColor;
+                ctx.shadowColor = '#1f2b4e30';
+                ctx.shadowBlur = 14;
+                ctx.shadowOffsetY = 4;
+                ctx.fill();
+                // 关闭阴影，避免影响文字和描边
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.strokeStyle = isHead ? '#1f2b4e' : (isTail ? '#b45353' : '#cbd6ed');
+                ctx.lineWidth = isHead ? 4 : (isTail ? 3 : 2.5);
+                ctx.stroke();
+
+                // 数值文字：无阴影，清晰
+                ctx.font = `600 ${Math.min(24, r * 0.7)}px "Segoe UI", system-ui, Roboto, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = isHead ? '#ffffff' : '#1f2b4e';
+                ctx.fillText(value, x, y);
+
+                // 头尾标签
+                if (isHead) {
+                    ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#1f2b4e';
+                    ctx.fillText('HEAD', x, y - r - 15);
+                }
+                if (isTail) {
+                    ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#b45353';
+                    ctx.fillText('TAIL', x, y - r - 15);
+                }
+                if (highlight) {
+                    ctx.font = '600 12px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#a05e00';
+                    ctx.fillText('新头', x, y + r + 17);
+                }
+            }
+
+            // 画环弧和方向箭头：每段弧中间放一个清晰的顺时针箭头
+            function drawRingArcs(ctx, states, ringAlpha, broken, breakAfterIdx) {
+                if (ringAlpha <= 0.01) return;
+
+                const angles = states.map(s => Math.atan2(s.y - RING_CY, s.x - RING_CX));
+
+                ctx.save();
+                ctx.globalAlpha = ringAlpha;
+
+                for (let i = 0; i < n; i++) {
+                    const j = (i + 1) % n;
+                    if (broken && i === breakAfterIdx) continue;
+
+                    let startAng = angles[i];
+                    let endAng = angles[j];
+                    let delta = ((endAng - startAng) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+                    const r = (states[i].r + states[j].r) / 2 + 2;
+
+                    // 弧线
+                    ctx.beginPath();
+                    ctx.arc(RING_CX, RING_CY, r, startAng, startAng + delta);
+                    ctx.strokeStyle = '#5c7cba';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    // 方向箭头（放在弧 55% 位置，避免与节点重叠）
+                    const midAng = startAng + delta * 0.55;
+                    const arrowX = RING_CX + r * Math.cos(midAng);
+                    const arrowY = RING_CY + r * Math.sin(midAng);
+                    // 顺时针切线方向
+                    const tangentDir = midAng + Math.PI / 2;
+
+                    ctx.save();
+                    ctx.translate(arrowX, arrowY);
+                    ctx.rotate(tangentDir);
+                    ctx.beginPath();
+                    ctx.moveTo(12, 0);
+                    ctx.lineTo(-6, -9);
+                    ctx.lineTo(-6, 9);
+                    ctx.closePath();
+                    ctx.fillStyle = '#5c7cba';
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                ctx.restore();
+            }
+
+            function drawLineArrows(ctx, states, alpha) {
+                if (alpha <= 0.01) return;
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                const indexed = states.map((s, i) => ({ ...s, idx: i }));
+                indexed.sort((a, b) => a.x - b.x);
+                for (let k = 0; k < indexed.length - 1; k++) {
+                    const from = indexed[k], to = indexed[k + 1];
+                    if (Math.abs(to.x - from.x) < from.r + to.r + 10) continue;
+                    drawArrow(ctx, from.x + from.r, from.y, to.x - to.r, to.y);
+                }
+                ctx.restore();
+            }
+
+            // ---------- 主绘制 ----------
+            function drawScene(step, progress) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const data = computeStates(step, progress);
+
+                const stepTexts = [
+                    { label: '0 / 4', desc: '原链表' },
+                    { label: '1 / 4', desc: '头尾相连 → 真环' },
+                    { label: '2 / 4', desc: '滑动新头 · 环旋转' },
+                    { label: '3 / 4', desc: '从新头前断开环' },
+                    { label: '4 / 4', desc: '展开成新链表' }
+                ];
+                stepLabel.textContent = stepTexts[step].label;
+                stepDesc.textContent = stepTexts[step].desc;
+
+                if (data.ringAlpha > 0.01) {
+                    drawRingArcs(ctx, data.states, data.ringAlpha, data.broken, data.breakAfterIdx);
+                }
+                if (data.lineArrowAlpha > 0.01) {
+                    drawLineArrows(ctx, data.states, data.lineArrowAlpha);
+                }
+
+                if (data.showScissors && data.scissorsPos) {
+                    const scAlpha = Math.min(1, progress * 3);
+                    ctx.save();
+                    ctx.globalAlpha = scAlpha;
+                    ctx.font = '36px "Segoe UI", system-ui, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('✂️', data.scissorsPos.x, data.scissorsPos.y);
+                    ctx.restore();
+                }
+
+                for (const s of data.states) {
+                    drawNode(ctx, s.x, s.y, s.r, s.value, { isHead: s.isHead, isTail: s.isTail, highlight: s.highlight });
+                }
+
+                if (step === 2 && data.showRotateHint) {
+                    const newHeadState = data.states[newHeadIdx];
+                    if (newHeadState) {
+                        ctx.font = 'bold 30px "Segoe UI", system-ui, sans-serif';
+                        ctx.fillStyle = '#c9821e';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('⬆️', newHeadState.x, newHeadState.y - newHeadState.r - 45);
+                    }
+                    ctx.font = '500 18px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#9e6b1f';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('环缓缓旋转，新头(节点4)滑向正上方', RING_CX, 65);
+                } else if (step === 3) {
+                    ctx.font = '500 18px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#9e4a4a';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('从新头前面断开环', RING_CX, 65);
+                } else if (step === 4 && progress > 0.6) {
+                    ctx.font = '500 18px "Segoe UI", system-ui, sans-serif';
+                    ctx.fillStyle = '#2f4a7a';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('展开成新链表: 4 → 5 → 1 → 2 → 3', 500, 65);
+                }
+            }
+
+            // ---------- 动画 ----------
+            function stopAnim() {
+                if (animRaf) { cancelAnimationFrame(animRaf); animRaf = null; }
+                animating = false;
+                animStartTime = null;
+            }
+
+            function animateStep(step) {
+                stopAnim();
+                const duration = STEP_DURATION[step] || 0;
+                if (duration <= 0) { drawScene(step, 1); return; }
+                animating = true;
+                animStartTime = null;
+                function tick(timestamp) {
+                    if (!animating) return;
+                    if (animStartTime === null) animStartTime = timestamp;
+                    const elapsed = timestamp - animStartTime;
+                    const p = Math.min(1, elapsed / duration);
+                    animProgress = p;
+                    drawScene(step, p);
+                    if (p < 1) {
+                        animRaf = requestAnimationFrame(tick);
+                    } else {
+                        animating = false;
+                        animRaf = null;
+                        drawScene(step, 1);
+                        updateButtons();
+                    }
+                }
+                animRaf = requestAnimationFrame(tick);
+            }
+
+            function updateButtons() {
+                prevBtn.disabled = (currentStep === 0) || animating;
+                nextBtn.disabled = (currentStep === totalSteps) || animating;
+            }
+
+            function goToStep(step, animate = true) {
+                if (step < 0) step = 0;
+                if (step > totalSteps) step = totalSteps;
+                currentStep = step;
+                updateButtons();
+                if (animate && STEP_DURATION[step]) animateStep(step);
+                else drawScene(step, 1);
+            }
+
+            function nextStep() {
+                if (animating) return;
+                if (currentStep < totalSteps) goToStep(currentStep + 1, true);
+            }
+
+            function prevStep() {
+                if (animating) return;
+                if (currentStep > 0) goToStep(currentStep - 1, false);
+            }
+
+            function reset() {
+                stopAnim();
+                currentStep = 0;
+                drawScene(0, 1);
+                updateButtons();
+            }
+
+            nextBtn.addEventListener('click', nextStep);
+            prevBtn.addEventListener('click', prevStep);
+            resetBtn.addEventListener('click', reset);
+
+            reset();
+        })();
+    </script>
+</body>
+</html>

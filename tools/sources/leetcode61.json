@@ -1,0 +1,12 @@
+{
+  "slug": "leetcode61",
+  "title": "Leetcode61旋转链表：我的巧思",
+  "date": "2026-11-14",
+  "category": "代码编写",
+  "excerpt": "通过改变尾节点构建环形链表并根据头节点断开链表",
+  "minutes": 1,
+  "mode": "md",
+  "source": "# 整体思路\n>给你一个链表的头节点 head ，旋转链表，将链表每个节点向右移动 k 个位置。\n\n题目要求我们对链表进行偏移操作，从把最后的节点移动到开头，可以把链表想象为一个环形，头尾相连，同时滑动新的头节点将链表分割，进行名义上的节点的移动。\n\n<p><a class=\"attach\" href=\"../files/20261114221448-deepseek_html_20261114_5b69cd.html\" download=\"deepseek_html_20261114_5b69cd.html\">📎 deepseek_html_20261114_5b69cd.html<span class=\"size\">25 KB</span></a></p>\n",
+  "body_html": "<h2>整体思路</h2>\n<blockquote><p>给你一个链表的头节点 head ，旋转链表，将链表每个节点向右移动 k 个位置。</p></blockquote>\n<p>题目要求我们对链表进行偏移操作，从把最后的节点移动到开头，可以把链表想象为一个环形，头尾相连，同时滑动新的头节点将链表分割，进行名义上的节点的移动。</p>\n<p><a class=\"attach\" href=\"../files/20261114221448-deepseek_html_20261114_5b69cd.html\" download=\"deepseek_html_20261114_5b69cd.html\">📎 deepseek_html_20261114_5b69cd.html<span class=\"size\">25 KB</span></a></p>",
+  "updated": "2026-11-14 22:14:55"
+}
